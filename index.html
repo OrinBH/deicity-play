@@ -2221,14 +2221,13 @@ const FACE_ORDER=[0,5,1,4,2,3]; // cube face i shows faces[FACE_ORDER[i]] (oppos
 const ARENA={c0:2,r0:2,n:6};
 const inArena=(c,r)=>c>=ARENA.c0&&c<ARENA.c0+ARENA.n&&r>=ARENA.r0&&r<ARENA.r0+ARENA.n;
 /* dice bounce off the whole board's walls; once they've struck the back wall and slow down, they roll back into the square and slot in */
-const BMIN_X=BX+HS+3,BMAX_X=BX+BW-HS-3,BMIN_Y=BY+HS+3,BMAX_Y=BY+BW-HS-3;
+let BMIN_X=BX+HS+3,BMAX_X=BX+BW-HS-3,BMIN_Y=BY+HS+3,BMAX_Y=BY+BW-HS-3;
 let AMIN_X,AMAX_X,AMIN_Y,AMAX_Y;
-function setArena(n){n=clamp(n,6,N);ARENA.n=n;ARENA.c0=ARENA.r0=Math.floor((N-n)/2);
-  AMIN_X=BX+ARENA.c0*CELL+CELL*.5;AMAX_X=BX+(ARENA.c0+n)*CELL-CELL*.5;AMIN_Y=BY+ARENA.r0*CELL+CELL*.5;AMAX_Y=BY+(ARENA.r0+n)*CELL-CELL*.5}
+function setArena(n){n=clamp(n,5,N);ARENA.n=n;ARENA.c0=ARENA.r0=Math.floor((N-n)/2);zrBounds()}
 setArena(6);
 /* flashes along the back wall: gold where a die strikes it, red across it on a throw that never reached it */
 const WALLFX=[];
-const arenaFor=()=>Math.min(N,6+2*Math.floor(MP.on?(G&&G.round||0)/2:fameLevel(G&&G.fame||0)/2)); // alone the square grows with fame; in a match every two rounds
+const arenaFor=()=>zrArenaFor(); // the reach (65-zoom-reach): alone it grows with fame; in a match every two rounds
 const GRAV=2600;
 
 function makeDie(def){
@@ -2254,7 +2253,7 @@ function renderDie(d){
   if(d.el.style.display==='none')d.el.style.display='';
   const gl=d.glow||0;if(Math.abs(gl-(d.lastGlow||0))>.02||(gl===0&&d.lastGlow)){d.lastGlow=gl;const hg=MP.on?d.def.hand:G&&G.deity,c=DEITIES[hg]?DEITIES[hg].rgb:'255,214,120';
     d.el.querySelector('.rig').style.filter=gl>.01?'drop-shadow(0 0 '+(3+gl*16).toFixed(1)+'px rgba('+c+','+(.35+gl*.65).toFixed(2)+')) brightness('+(1+gl*.45).toFixed(2)+')':''}
-  const m=Q.mat(d.q),s=d.scale*(1+d.z/210);
+  const m=Q.mat(d.q),s=d.scale*(1+d.z/210)*(d.zk||1);
   d.el.style.transform='translate3d('+d.x.toFixed(2)+'px,'+d.y.toFixed(2)+'px,0) scale('+s.toFixed(4)+')';
   d.cube.style.transform='matrix3d('+m[0]+','+m[3]+','+m[6]+',0,'+m[1]+','+m[4]+','+m[7]+',0,'+m[2]+','+m[5]+','+m[8]+',0,0,0,0,1)';
   for(let i=0;i<6;i++){const nx=m[0]*FN[i][0]+m[1]*FN[i][1]+m[2]*FN[i][2],ny=m[3]*FN[i][0]+m[4]*FN[i][1]+m[5]*FN[i][2],nz=m[6]*FN[i][0]+m[7]*FN[i][1]+m[8]*FN[i][2];
@@ -2298,7 +2297,7 @@ function spawnDie(def){const d=makeDie(def);const[x,y]=traySpot(TRAY.ix+TRAY.iw/
 /* ---------- per-frame update ---------- */
 function updateDice(dt,t){
   for(const d of DICE){if(!isFinite(d.x)||!isFinite(d.y)||!isFinite(d.z)||!isFinite(d.vx)||!isFinite(d.vy)){rescueDie(d);continue}
-    d.t+=dt;if(d.state!=='held'&&d.glow>0)d.glow=Math.max(0,d.glow-dt*.45);if(d.popT!=null&&d.popT<1){d.popT=Math.min(1,d.popT+dt*4);d.scale=easeOutBack(d.popT);if(d.popT>=1)d.scale=1}
+    d.t+=dt;zrDieK(d,dt);if(d.state!=='held'&&d.glow>0)d.glow=Math.max(0,d.glow-dt*.45);if(d.popT!=null&&d.popT<1){d.popT=Math.min(1,d.popT+dt*4);d.scale=easeOutBack(d.popT);if(d.popT>=1)d.scale=1}
     switch(d.state){
       case 'tray':if(d.hovT!=null){d.hovT+=dt;const k=d.hovT/.42;if(k>=1){d.hovT=null;d.q=d.hq0;d.z=0}
           else{d.z=Math.sin(k*Math.PI)*15;d.q=Q.norm(Q.mul(Q.axis(d.hax[0],d.hax[1],.2,Math.sin(k*Math.PI*3)*(1-k)*.38),d.hq0))}}
@@ -2324,7 +2323,7 @@ function updateDice(dt,t){
   // thrown dice knock into each other
   const fl=DICE.filter(d=>d.state==='fly');
   for(let i=0;i<fl.length;i++)for(let j=i+1;j<fl.length;j++){const a=fl[i],b=fl[j];if(Math.abs(a.z-b.z)>40)continue;const dx=b.x-a.x,dy=b.y-a.y,q=Math.hypot(dx,dy);
-    if(q<42&&q>0.01){const nx=dx/q,ny=dy/q,o=(42-q)/2;a.x-=nx*o;a.y-=ny*o;b.x+=nx*o;b.y+=ny*o;
+    const RR=42*Math.min(a.zk||1,b.zk||1);if(q<RR&&q>0.01){const nx=dx/q,ny=dy/q,o=(RR-q)/2;a.x-=nx*o;a.y-=ny*o;b.x+=nx*o;b.y+=ny*o;
       const va=a.vx*nx+a.vy*ny,vb=b.vx*nx+b.vy*ny,dv=va-vb;if(dv>0){const k=dv*.85;a.vx-=k*nx;a.vy-=k*ny;b.vx+=k*nx;b.vy+=k*ny;SFX.clack(pick([a.mat,b.mat]),dv/700);
         a.w=a.w.map(v=>v+rr(-1,1)*dv*.02);b.w=b.w.map(v=>v+rr(-1,1)*dv*.02);sparks((a.x+b.x)/2,(a.y+b.y)/2,Math.min(6,dv/120),'#fff2c0')}}}
   for(const d of DICE)renderDie(d);
@@ -2381,7 +2380,7 @@ function updateFly(d,dt){
   else if((ground&&sp<60)||d.flyT>5){d.state='rest';d.vx=d.vy=d.vz=0;d.w=[0,0,0];hopTo(d,d.x,d.y,0,.16,2,()=>{d.state='rest'})}
 }
 function beginSettle(d){
-  const cell=claimCell(d.x,d.y);d.cell=cell;const cx=BX+cell[0]*CELL+CELL/2,cy=BY+cell[1]*CELL+CELL/2;
+  const cell=claimCell(d.x,d.y);d.cell=cell;const[cx,cy]=zrToScreen(BX+cell[0]*CELL+CELL/2,BY+cell[1]*CELL+CELL/2);
   let tq=snapUp(d.q);d.value=sealV(d.def.type,d.faceVals[topFace(tq)],d);
   // a lesson can decide how a die lands (v5)
   {const fv=forceFace(d);if(fv!=null){const i=d.faceVals.indexOf(fv);if(i>=0){tq=snapUp(Q.fromTo(FN[i],[0,0,1]));d.value=fv}}}
@@ -2402,9 +2401,9 @@ function updateHeld(d,dt,t){
 }
 
 /* ---------- board cells ---------- */
-function claimCell(x,y){
+function claimCell(x,y){[x,y]=zrToBoard(x,y);
   const taken=R?R.claimed:new Set();let best=null,bd=1e9;
-  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const k=c+','+r;if(taken.has(k)||!inArena(c,r))continue;if(c<=1&&r===GATE_ROW)continue;
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const k=c+','+r;if(taken.has(k)||!inArena(c,r))continue;if(c<=ARENA.c0+1&&r===zrGR())continue;
     const cx=BX+c*CELL+CELL/2,cy=BY+r*CELL+CELL/2;let dd=dist(x,y,cx,cy);
     for(const[a,b]of[[1,0],[-1,0],[0,1],[0,-1]])if(taken.has((c+a)+','+(r+b)))dd+=40;
     for(const[a,b]of[[1,1],[-1,1],[1,-1],[-1,-1]])if(taken.has((c+a)+','+(r+b)))dd+=18;
@@ -2467,15 +2466,14 @@ function drawCamp(g,lv){
   const R=mulberry(77),x0=CAMP_X,y0=CAMP_Y,w=CAMP_C*CT,h=CAMP_R*CT;
   // grass strips carry the roads off the camp: east to the board's gate, south to the graveyard gate
   const fx=ctile(2,4)[0],sx0=x0+w,sx1=BX-16;
-  g.fillStyle=ccol('#1c0f07');g.fillRect(sx0-4,GATE_Y-CT/2+5,sx1-sx0+4,CT);
-  tileRect(g,R,sx0-4,GATE_Y-CT/2,sx1-sx0+4,CT,ccol('#4d7832'),ccols(['#5f8c3c','#3d6326','#6e9a48']));
+
   // slab under the tiles
   g.fillStyle=ccol('#1c0f07');rrect(g,x0-5,y0+4,w+10,h+10,8);g.fill();g.fillStyle=ccol('#4a2f19');rrect(g,x0-5,y0-2,w+10,h+8,8);g.fill();
   for(let r=0;r<CAMP_R;r++)for(let c=0;c<CAMP_C;c++){const x=x0+c*CT,y=y0+r*CT,k=c+','+r;
     if(CAMP_DIRT.has(k))tileBase(g,R,x,y,CT,ccol('#7a5c3a'),ccols(['#8a6a44','#5a4028','#a08058']));
     else{tileBase(g,R,x,y,CT,ccol('#4d7832'),ccols(['#5f8c3c','#3d6326','#6e9a48']));for(let i=0;i<4;i++)tuft(g,x+6+R()*40,y+10+R()*38,.9,ccol(R()<.5?'#78a850':'#3a5e26'))}cskTile(g,x,y,k)}
   // one gravel road, built like the roads on the board: fire to gate, with a branch down to the graveyard
-  roadLines(g,[[[fx,ctile(2,3)[1]-22],[fx,GATE_Y],[sx1+2,GATE_Y]],[[fx,GATE_Y],[fx,GRAVE.y+14]]],R);drawCampBridge(g);
+  roadLines(g,[[[fx,ctile(2,3)[1]-22],[fx,GATE_Y],[sx0-7,GATE_Y]],[[fx,GATE_Y],[fx,GRAVE.y+14]]],R);drawCampBridge(g);
   // tents, a crate, trees in the corners
   const[t1x,t1y]=ctile(0,0),[t2x,t2y]=ctile(4,0);tent(g,t1x+8,t1y+18,50,'#c9a46a','#8a6a3a');tent(g,t2x+8,t2y+18,46,'#8aa0b8','#56687e');
   {const[cx,cy]=ctile(2,0);if(!cskCrate(g,cx,cy)){g.fillStyle='rgba(0,0,0,.3)';g.fillRect(cx-11,cy+6,26,6);g.fillStyle=ccol('#a8763c');g.fillRect(cx-12,cy-10,24,18);g.strokeStyle=ccol('#5a3a1a');g.lineWidth=1.4;g.strokeRect(cx-12,cy-10,24,18);g.beginPath();g.moveTo(cx-12,cy-10);g.lineTo(cx+12,cy+8);g.stroke()}}
@@ -2604,11 +2602,11 @@ function drawBoardFrame(g){
   for(const[x,y]of[[fx+9,fy+9],[fx+fw-9,fy+9],[fx+9,fy+fw-9],[fx+fw-9,fy+fw-9]]){g.fillStyle='#5a3c0c';g.beginPath();g.arc(x,y,7,0,7);g.fill();
     const rg=g.createRadialGradient(x-2,y-2,0,x,y,6);rg.addColorStop(0,'#fff0b0');rg.addColorStop(1,'#b8801c');g.fillStyle=rg;g.beginPath();g.arc(x,y,5.5,0,7);g.fill()}
   matPaint('frame',g);
-  // gate in the west wall
-  g.fillStyle='#4d7832';g.fillRect(fx-2,GATE_Y-CT/2,22,CT);roadLines(g,[[[fx-6,GATE_Y],[BX+6,GATE_Y]]],R);
+  // gate in the west wall (Lab: none; heroes leap from the camp onto the land)
+  if(0){g.fillStyle='#4d7832';g.fillRect(fx-2,GATE_Y-CT/2,22,CT);roadLines(g,[[[fx-6,GATE_Y],[BX+6,GATE_Y]]],R);
   for(const s of[-1,1]){const y=GATE_Y+s*24;g.fillStyle='rgba(0,0,0,.45)';g.beginPath();g.arc(fx+11,y+3,10,0,7);g.fill();
     gr=g.createRadialGradient(fx+8,y-3,1,fx+11,y,10);gr.addColorStop(0,'#e8e2d4');gr.addColorStop(1,'#7a756c');g.fillStyle=gr;g.beginPath();g.arc(fx+11,y,9.5,0,7);g.fill();
-    g.fillStyle='#e5b54a';g.beginPath();g.arc(fx+11,y,3,0,7);g.fill()}
+    g.fillStyle='#e5b54a';g.beginPath();g.arc(fx+11,y,3,0,7);g.fill()}}
 }
 function drawBlankBoard(g){
   if(matPaint('board',g))return;
@@ -2915,7 +2913,7 @@ function cskCypress(g,x,y,s,R){const S=cskSet();if(LSK.plain||!S||!S.cypress)ret
 function cskGrave(g){const S=cskSet();if(S&&S.grave){g.save();S.grave(g,mulberry(919));g.restore()}}
 function cskGlow(i){const S=cskSet();return S&&S.glow?S.glow[i]:(i?'255,170,60':'255,200,110')}
 /* the board frame's gate strip is part of the static background (not ours): a skin lays its own strip over it, around the posts */
-function cskGate(g){const S=cskSet();if(!S)return;const x0=BX-18,y0=GATE_Y-CT/2,w=18,h=CT;let c=LSK.gate;
+function cskGate(g){return;const S=cskSet();if(!S)return;const x0=BX-18,y0=GATE_Y-CT/2,w=18,h=CT;let c=LSK.gate;
   if(!c||c.sid!==S.id||c.is!==IS){c=mkCanvas(w,h);c.sid=S.id;c.is=IS;const q=c.g;q.translate(-x0,-y0);q.save();q.beginPath();q.rect(x0,y0,w,h);
     for(const s of[-1,1]){const py=GATE_Y+s*24+1.5;q.moveTo(x0+22,py);q.arc(x0+11,py,11,0,Math.PI*2)}q.clip('evenodd');
     cskWith(S,()=>{tileRect(q,mulberry(31),x0-2,y0,22,h,ccol('#4d7832'),ccols(['#5f8c3c','#3d6326','#6e9a48']));roadLines(q,[[[x0-6,GATE_Y],[BX+6,GATE_Y]]],mulberry(99));if(S.gate)S.gate(q,x0,y0,w,h)});
@@ -4273,7 +4271,7 @@ function checkCombos(){const by={};for(const d of new Set(R.dice)){if(!d.value||
   R.combos=sets.map(([v,a])=>({v:+v,n:a.length,mats:a.map(d=>d.mat),pay:KIND_PAY(a.length),dice:a,by:MP.on?owners(a):null}));R.comboT0=performance.now()/1000;
   for(const C of R.combos)EV.emit('set',{n:C.n,value:C.v});
   sets.forEach(([v,a],k)=>{const pay=KIND_PAY(a.length);setTimeout(()=>{if(!R)return;SFX.combo(a.length);shakeScreen(.25+a.length*.08);
-    for(const d of a){burst(d.x,d.y,16,'#ffe9a0');ring(d.x,d.y,'#ffe27a',true);PART.push({x:d.x,y:d.y+10,life:0,max:.8,type:'pillar',col:deityOf(G.deity).rgb,small:1})}
+    zrTable(()=>{for(const d of a){burst(d.x,d.y,16,'#ffe9a0');ring(d.x,d.y,'#ffe27a',true);PART.push({x:d.x,y:d.y+10,life:0,max:.8,type:'pillar',col:deityOf(G.deity).rgb,small:1})}});
     if(MP.on){const by=owners(a);for(const o in by)asGod(o,()=>gainWorship(Math.max(1,Math.round(pay*by[o]/a.length)),BCX,BY+170))}else gainWorship(pay,BCX,BY+170)},150+k*900)})}
 function buildLand(){
   R.phase='unfold';R.t=0;R.land=true;MUSIC.go('march',{fanfare:1});
@@ -4281,7 +4279,7 @@ function buildLand(){
   checkCombos();
   const seed=R.seed!=null?R.seed:(R.seed=(Math.random()*4294967295)>>>0),nA=vnoise(seed),nB=vnoise(seed^0x9e3779b9),nC=vnoise(seed^0x5bd1e995),rand=mulberry(seed^0x2545f491);
   const cells=[];
-  for(let r=0;r<N;r++)for(let c=0;c<N;c++)cells.push({c,r,i:idx(c,r),x:BX+c*CELL,y:BY+r*CELL,cx:BX+c*CELL+CELL/2,cy:BY+r*CELL+CELL/2,ter:'grass',dist:99,revealT:0,road:false,roadT:1e9,links:new Set(),loc:null,west:false,items:[],locked:false});
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++)cells.push({c,r,i:idx(c,r),x:BX+c*CELL,y:BY+r*CELL,cx:BX+c*CELL+CELL/2,cy:BY+r*CELL+CELL/2,ter:'grass',dist:99,revealT:0,road:false,roadT:1e9,links:new Set(),loc:null,west:false,items:[],locked:!inArena(c,r)&&!zrFringe(c,r),fringe:zrFringe(c,r)});
   R.cells=cells;
   R.dice.forEach((d,k)=>{if(d.def.type==='encounter')return;const cell=cells[idx(d.cell[0],d.cell[1])];if(cell.loc)return;const L=makeLoc(d,cell,R.locs.length);cell.loc=L;R.locs.push(L)});
   // terrain: noise + each die bleeds its own flavor into the land around it
@@ -4292,7 +4290,7 @@ function buildLand(){
     for(const L of R.locs){const dd=Math.hypot(L.cell.c-cell.c,L.cell.r-cell.r);if(dd<bd){bd=dd;best=L}}
     cell.dist=bd;
     // only the land the dice touch is alive; beyond it lies waste
-    const FERT=2.3;if(bd>FERT&&!(bd<FERT+1.1&&rand()<(FERT+1.1-bd)*.8)){const w=nC(cell.c*.24+3,cell.r*.24+7),o=nA(cell.c*.21+17,cell.r*.21+9);ter=o>.6&&!(cell.c<=1&&cell.r===GATE_ROW)?'ocean':w<.32?'desert':w<.5?'cracked':w<.7?'badlands':'marsh'}
+    const FERT=2.3;if(bd>FERT&&!(bd<FERT+1.1&&rand()<(FERT+1.1-bd)*.8)){const w=nC(cell.c*.24+3,cell.r*.24+7),o=nA(cell.c*.21+17,cell.r*.21+9);ter=o>.6&&!(cell.c<=ARENA.c0+1&&cell.r===zrGR())?'ocean':w<.32?'desert':w<.5?'cracked':w<.7?'badlands':'marsh'}
     else if(best&&bd>0&&rand()<(bd<=1.5?.9:(lairLv(best)>=7?.85:.6)))ter=landOf(best);
     if(cell.loc)ter=baseOf(cell.loc);
     cell.ter=cell.locked?'locked':ter;
@@ -4311,7 +4309,7 @@ function buildLand(){
     const sea=(dc,dr)=>{const c=cell.c+dc,r=cell.r+dr;if(c<0||r<0||c>=N||r>=N)return true;const t=cells[idx(c,r)].ter;return t==='ocean'||t==='water'};
     const nb=cell.ter==='ocean'?{n:sea(0,-1),s:sea(0,1),e:sea(1,0),w:sea(-1,0)}:{n:wat(0,-1),s:wat(0,1),e:wat(1,0),w:wat(-1,0),ne:wat(1,-1),nw:wat(-1,-1),se:wat(1,1),sw:wat(-1,1)};
     const gc=mkCanvas(CELL,CELL,landRes());paintGround(gc.g,cell.ter,R2,nb);cell.ground=gc;
-    if(!cell.road&&!cell.loc){cell.items=makeDecor(cell.ter,R2);renderDecor(cell)}
+    if(!cell.road&&!cell.loc&&!zrStub(cell)){cell.items=makeDecor(cell.ter,R2);renderDecor(cell)}
   }
   const departAt=Math.max(maxReveal,R.lastRoadT||0)+.45;
   at(departAt,departHeroes);
@@ -4337,11 +4335,11 @@ const dialCap=L=>{const t=L.die.def.type;return gateOn(t)?G.gate[t]:99};
 function setLocFace(L,v){L.face=v;buildQueue(L);const d=L.die;if(d&&d.faceVals){const i=d.faceVals.indexOf(v);if(i>=0){d.value=v;d.q=snapUp(Q.fromTo(FN[i],[0,0,1]))}}}
 
 function buildRoads(t0){
-  const cells=R.cells,gate=cells[idx(0,GATE_ROW)];gate.road=true;gate.west=true;gate.roadT=t0;
+  const cells=R.cells,gate=cells[zrGateI()];gate.road=true;gate.west=true;gate.roadT=t0;
   const net=new Set([gate.i]);let order=[];
-  const locs=[...R.locs].sort((a,b)=>(a.cell.c+Math.abs(a.cell.r-GATE_ROW))-(b.cell.c+Math.abs(b.cell.r-GATE_ROW)));
+  const locs=[...R.locs].sort((a,b)=>(a.cell.c+Math.abs(a.cell.r-zrGR()))-(b.cell.c+Math.abs(b.cell.r-zrGR())));
   // roads happily run through places, so adventurers meet them in order
-  const cost=cell=>{if(cell.locked)return 1e6;if(cell.loc)return 2.6;if(cell.road)return .55;return{water:7,ocean:14,hills:3.2,forest:2.4,blight:2.6,marsh:4,badlands:3,desert:2.3,ooze:3.6,bog:3.8,crag:3,obsidian:3}[cell.ter]||2};
+  const cost=cell=>{if(cell.locked||cell.fringe)return 1e6;if(cell.loc)return 2.6;if(cell.road)return .55;return{water:7,ocean:14,hills:3.2,forest:2.4,blight:2.6,marsh:4,badlands:3,desert:2.3,ooze:3.6,bog:3.8,crag:3,obsidian:3}[cell.ter]||2};
   for(const L of locs){
     const start=L.cell,distm=new Map([[start.i,0]]),prev=new Map(),open=[start.i];let found=null;
     while(open.length){open.sort((a,b)=>distm.get(a)-distm.get(b));const u=open.shift();if(net.has(u)){found=u;break}
@@ -4407,7 +4405,7 @@ function finishAdventure(){
   at(R.t+3,deconstruct)}
 function deconstruct(){
   ZM.tz=1; // the round is over: back out to the whole table
-  R.phase='recede';R.recT0=R.t;R.recFar=Math.max(...R.cells.map(c=>c.dist));MUSIC.go('camp',{in:2.5,out:.6});
+  R.phase='recede';R.recT0=R.t;R.recFar=Math.max(...R.cells.filter(c=>!c.locked).map(c=>c.dist));MUSIC.go('camp',{in:2.5,out:.6});
   // chests nobody smashed are emptied on the way out, at half the odds
   for(const L of R.locs)if(L.type==='treasure'&&L.looted&&!L.broken){L.broken=true;if(rand()<.5)dropShards('treasure',L.face?ri(1,2)+(L.face>=4?1:0):1,L.cx,L.cy-8)}
   G.round++;
@@ -4421,7 +4419,7 @@ function deconstruct(){
     at(R.t+.95,()=>{d.vis=true;d.state='placed';d.popT=0;d.scale=0;d.q=snapUp(d.q)});
     at(R.t+1.3+k*.09,()=>{goHome(d)})});
   at(R.t+1.3+R.dice.length*.09+.9,()=>{finishRound()})}
-function growArena(){const n=arenaFor();if(n<=ARENA.n)return;ARENA.anim={from:ARENA.n,t0:performance.now()/1000};setArena(n);
+function growArena(){zrApply(arenaFor());return;const n=arenaFor();if(n<=ARENA.n)return;ARENA.anim={from:ARENA.n,t0:performance.now()/1000};setArena(n);
   SFX.unlock();shakeScreen(.4);if(MP.on)return; // a match says it in its own notice (the table grows)
   toast(ico('laurel')+'<span><b>Your reach grows</b>Dice can now land in an '+n+' by '+n+' square</span>',4200)}
 function finishRound(){
@@ -4462,7 +4460,7 @@ function addRecruit(free){const h=newHero();if(hasBuild(2)&&!h.weapon)h.weapon=1
 function departHeroes(){
   let i=0;R.out=[];
   for(const h of G.heroes){if(h.hp<=0)continue;const hr=ensureHR(h);if(hr.state==='grave')continue;
-    hr.state='depart';hr.delay=i*.45;hr.ways=[...CAMP_WAY,[BX+CELL/2,GATE_Y]];hr.cell=idx(0,GATE_ROW);hr.carry=0;hr.target=null;hr.loc=null;hr.pray=false;hr.atTown=false;
+    hr.state='depart';hr.delay=i*.45;hr.ways=zrOutWays();hr.cell=zrGateI();hr.carry=0;hr.target=null;hr.loc=null;hr.pray=false;hr.atTown=false;
     hr.off=[rr(-4,4),rr(-3,3)];R.out.push(hr);i++}
 }
 const visitors=L=>R.out.filter(o=>o.loc===L&&o.state==='act').length;
@@ -4496,10 +4494,10 @@ function think(hr){hr.spotL=null;
   let s=cands.reduce((a,c)=>a+c.w,0)*rand(),ch=cands[0];for(const c of cands){s-=c.w;if(s<=0){ch=c;break}}
   hr.target=ch.L;hr.state='walk';setPath(hr,ch.path);persChose(hr,ch,cands);hr.lastCands=cands.map(c=>({t:c.L.type,w:c.w,pm:c.pm,lv:DT[c.L.type].combat?dangerLv(c.L):0,n:c.path.length,pick:c===ch}))}
 function setPath(hr,path){hr.path=path;hr.pi=path[0]===hr.cell?1:0}
-function goHomeHero(hr){const p=roadPath(hr.cell,idx(0,GATE_ROW))||[hr.cell];hr.target=null;hr.state='leave';setPath(hr,p)}
-const homeWays=h=>{const hr=HR[h.id],w=hr?(hr.wp=campSpot(hr)):SLOTS[h.slot];if(hr)hr.wait=rr(2,5);return[[BX+CELL/2-30,GATE_Y],CAMP_WAY[2],CAMP_WAY[1],CAMP_WAY[0],w]};
+function goHomeHero(hr){const p=roadPath(hr.cell,zrGateI())||[hr.cell];hr.target=null;hr.state='leave';setPath(hr,p)}
+const homeWays=h=>{const hr=HR[h.id],w=hr?(hr.wp=campSpot(hr)):SLOTS[h.slot];if(hr)hr.wait=rr(2,5);return[...zrInWays(),CAMP_WAY[2],CAMP_WAY[1],CAMP_WAY[0],w]};
 const slowK=hr=>hr.slowT>0?.45:1;
-function moveTo(hr,tx,ty,dt,mul){const dx=tx-hr.x,dy=ty-hr.y,d=Math.hypot(dx,dy),st=SPEED*(mul||1)*dt*slowK(hr);if(Math.abs(dx)>.5)hr.face=dx>0?1:-1;
+function moveTo(hr,tx,ty,dt,mul){const dx=tx-hr.x,dy=ty-hr.y,d=Math.hypot(dx,dy),st=SPEED*(mul||1)*dt*slowK(hr)*(bzHero(hr)?zrWalk():1);if(Math.abs(dx)>.5)hr.face=dx>0?1:-1;
   if(d<=st){hr.x=tx;hr.y=ty;return true}hr.x+=dx/d*st;hr.y+=dy/d*st;return false}
 
 function updateHeroes(dt){
@@ -4515,13 +4513,14 @@ function updateHeroes(dt){
     hr.walk=lerp(hr.walk,moving?1:0,Math.min(1,dt*10));
     if((hr.state==='fight'||hr.state==='act')&&hr.loc&&R){const p=spotPos(hr.loc,hr)||[hr.x,hr.y],k=Math.min(1,dt*7);hr.x=lerp(hr.x,p[0],k);hr.y=lerp(hr.y,p[1],k);
       if(hr.state==='fight'){const mx=monPos(hr.loc)[0];if(Math.abs(hr.x-mx)>3)hr.face=hr.x<mx?1:-1}}
+    if(hr.leap){zrLeapStep(hr,dt);continue}
     switch(hr.state){
       case 'camp':{campWander(hr,dt);
         if(hr.asks>0)hr.asks-=dt;
         if((MP.on?h.faith===meGod():believes(h))&&!h.named&&!hr.say&&!R&&CARD.h!==h&&rand()<dt/16){hr.say={text:pick(['I wish for a godname.','Grant me a godname?','Will you godname me?','A godname, my god?','I would bear your godname.']),t:0,dur:2.8};hr.asks=8;SFX.voice(hr.pitch*1.1,3)}
         break}
       case 'arrive':{const s=hr.wp||(hr.wp=campSpot(hr));if(moveTo(hr,s[0],s[1],dt)){hr.state='camp';hr.wait=rr(1.5,4)}break}
-      case 'depart':if(hr.delay>0){hr.delay-=dt;break}{const w=hr.ways[0];if(moveTo(hr,w[0],w[1],dt)){hr.ways.shift();if(!hr.ways.length){hr.state='think'}}}break;
+      case 'depart':if(hr.delay>0){hr.delay-=dt;break}{const w=hr.ways[0];if(moveTo(hr,w[0],w[1],dt)){zrJump(hr,w);hr.ways.shift();if(!hr.ways.length){hr.state='think'}}}break;
       case 'think':think(hr);break;
       case 'walk':case 'leave':{
         if(hr.pi>=hr.path.length){
@@ -4535,7 +4534,7 @@ function updateHeroes(dt){
           if(stop){hr.target=L2;arrive(hr,L2);break}
           if(hr.state==='walk'&&hr.target&&!available(hr.target,hr)){hr.target=null;hr.state='think'}}
         break}
-      case 'home':case 'run':{const w=hr.ways[0];if(moveTo(hr,w[0],w[1],dt,hr.state==='run'?3:hr.risen?1.2:1.7)){hr.ways.shift();if(!hr.ways.length){hr.state='camp';if(hr.risen)hr.risen=false;else bankHome(hr)}}break}
+      case 'home':case 'run':{const w=hr.ways[0];if(moveTo(hr,w[0],w[1],dt,hr.state==='run'?3:hr.risen?1.2:1.7)){zrJump(hr,w);hr.ways.shift();if(!hr.ways.length){hr.state='camp';if(hr.risen)hr.risen=false;else bankHome(hr)}}break}
       case 'grave':if(rand()<dt*3)motes(hr.x+rr(-6,6),hr.y-18,1,'rgba('+deityOf(MP.on?h.faith:G.deity).rgb+',1)');if(!R)walkUpFromGrave(hr);break;
       case 'cheer':hr.cheerT+=dt;if(hr.pray&&rand()<dt*6)motes(hr.x+rr(-6,6),hr.y-20,1,'rgba('+deityOf(MP.on?hr.loc&&hr.loc.owner:G.deity).rgb+',1)');if(hr.cheerT>=3.1)runHome(hr);break;
       case 'enc':encHeld(hr,dt);break;
@@ -4549,7 +4548,7 @@ function cheer(hr){if(hr.state==='dead'||hr.state==='camp'||hr.state==='home'||h
   // anyone praying or resting in town keeps at it through the countdown, so the god can still reach them
   const keep=hr.state==='act'&&(hr.pray||hr.atTown);hr.state='cheer';hr.cheerT=0;if(!keep){hr.pray=false;hr.atTown=false;hr.loc=null}hr.target=null;
   hr.say={text:pick(['Victory!','We did it!','Hooray!','Glory!','Ha ha!']),t:0,dur:2.4};SFX.voice(hr.pitch*1.15,3)}
-function runHome(hr){hr.state='run';hr.pray=false;hr.atTown=false;hr.loc=null;hr.ways=[[BX+CELL/2,GATE_Y],...homeWays(hr.h)]}
+function runHome(hr){hr.state='run';hr.pray=false;hr.atTown=false;hr.loc=null;hr.ways=[zrGateC(),...homeWays(hr.h)]}
 function bankHome(hr){const h=hr.h,c=hr.carry;hr.carry=0;gainFame(1,hr.x,hr.y-30);
   // in a match the statue works for whoever built it
   if(hasBuild(7)){if(!MP.on){if(believes(h))gainWorship(2,hr.x,hr.y-36)}else{const sb=G.builtBy&&G.builtBy[7];if(sb&&h.faith===sb)asGod(sb,()=>gainWorship(2,hr.x,hr.y-36))}}
@@ -6831,16 +6830,17 @@ function bzOut(x,y){return[x*BZ.z+BZ.tx,y*BZ.z+BZ.ty]}
 /* only the unfolded land zooms: never while dice fly, while the golden die comes down, while dice are in hand, or once the land folds */
 function bzAllowed(){return!!(R&&R.land&&R.phase!=='recede'&&R.phase!=='throw'&&G&&G.deity&&!G.lost&&!GOLD.on&&!HAND.held.length&&R.dice.every(d=>!d.vis||!DICE.includes(d)))}
 /* heroes walking the land draw (and are hit) in the board layer; in camp, on the camp road or at the graveyard they are on the table */
-const bzHero=hr=>hr.state!=='camp'&&hr.state!=='arrive'&&hr.state!=='grave'&&hr.state!=='intro'&&hr.x>=BX-1?1:0;
-function bzFit(){const z=BZ.z;BZ.tx=clamp(BZ.ax-BZ.px*z,BX+BW-(BX+BW)*z,BX-BX*z);BZ.ty=clamp(BZ.ay-BZ.py*z,BY+BW-(BY+BW)*z,BY-BY*z)}
-function bzStep(dt){BZ.force=null;
-  if(!bzAllowed()){BZ.tz=1;BZ.pan=null}
+const bzHero=hr=>!hr.leap&&hr.state!=='camp'&&hr.state!=='arrive'&&hr.state!=='grave'&&hr.state!=='intro'&&hr.x>=BX-1?1:0;
+function bzFit(){const z=BZ.z,B=zrBase(),a0=BX+B.c0*CELL,a1=a0+B.n*CELL,b0=BY+B.c0*CELL,b1=b0+B.n*CELL;BZ.tx=clamp(BZ.ax-BZ.px*z,BX+BW-a1*z,BX-a0*z);BZ.ty=clamp(BZ.ay-BZ.py*z,BY+BW-b1*z,BY-b0*z)}
+function bzStep(dt){BZ.force=null;const B=zrBase();
+  if(!bzAllowed()){BZ.tz=B.z;BZ.pan=null}
+  BZ.tz=clamp(BZ.tz,B.z,Math.max(BZ.max,B.z*1.5));
   if(Math.abs(BZ.z-BZ.tz)>1e-4){BZ.z=lerp(BZ.z,BZ.tz,Math.min(1,dt*14));if(Math.abs(BZ.z-BZ.tz)<.002)BZ.z=BZ.tz}
-  if(BZ.tz<=1&&BZ.z<1.0005)BZ.z=1;bzFit()}
+  BZ.z=Math.max(BZ.z,B.z);if(BZ.tz<=B.z+1e-4&&BZ.z<B.z+.0005){BZ.z=B.z;BZ.px=B.cx;BZ.py=B.cy;BZ.ax=BCX;BZ.ay=BCY}bzFit()}
 function bzWheel(e){if(e.ctrlKey)e.preventDefault();const tg=e.target;if(tg!==$('cv')&&tg!==$('stage')&&!(tg.closest&&tg.closest('#dice')))return;e.preventDefault();
   if(HAND.down||DIAL.on||BZ.pan)return;const[sx,sy]=toStage(e);if(!inBoardRect(sx,sy)||!bzAllowed())return;
   BZ.px=(sx-BZ.tx)/BZ.z;BZ.py=(sy-BZ.ty)/BZ.z;BZ.ax=sx;BZ.ay=sy;
-  const dy=e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1),was=BZ.tz;BZ.tz=clamp(BZ.tz*Math.exp(-clamp(dy,-120,120)*.0016),1,BZ.max);
+  const dy=e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1),was=BZ.tz;BZ.tz=clamp(BZ.tz*Math.exp(-clamp(dy,-120,120)*.0016),zrBase().z,Math.max(BZ.max,zrBase().z*1.5));
   if(Math.abs(BZ.tz-was)>.02)SFX.tick&&SFX.tick()}
 /* zoomed in, the right or middle mouse button drags the land around (the left button keeps its clicks, dials and dice) */
 {const st=$('stage');
@@ -6859,14 +6859,16 @@ function bzT(g){if(!bzOn())return;g.translate(BZ.tx,BZ.ty);g.scale(BZ.z,BZ.z);if
 function bzDraw(g,fn){const f0=BZ.force;BZ.force=1;
   if(!bzOn()){try{fn()}finally{BZ.force=f0}return}
   // just past 1x the clip still lets tall sprites at the board's edge spill over the frame, as they do unzoomed
-  const m=40*(1-clamp((BZ.z-1)/.15,0,1));
-  g.save();g.beginPath();g.rect(BX-m,BY-m,BW+2*m,BW+2*m);g.clip();g.translate(BZ.tx,BZ.ty);g.scale(BZ.z,BZ.z);
+  const m=40*(1-clamp((BZ.z-1)/.15,0,1)),zl=BZ.loose&&BZ.z<=zrBase().z*1.02;
+  g.save();g.beginPath();if(zl)g.rect(0,0,W,H);else g.rect(BX-m,BY-m,BW+2*m,BW+2*m);g.clip();g.translate(BZ.tx,BZ.ty);g.scale(BZ.z,BZ.z);
   try{fn()}finally{g.restore();BZ.force=f0}}
 function bzPass(g,fn){bzDraw(g,()=>fn(1));fn(0)}
+function bzDrawL(g,fn){BZ.loose=1;try{bzDraw(g,fn)}finally{BZ.loose=0}}
+function bzPassL(g,fn){bzDrawL(g,()=>fn(1));fn(0)}
 /* where an effect lives, decided the moment it is spawned */
 const BZ_TRAVEL={home:1,shard:1,graveFly:1};
 function bzTag(p){if(!p||typeof p!=='object'||p.bz!==undefined)return;
-  let b=BZ.force!=null?BZ.force:(p.x>=BX-1&&p.x<=BX+BW+20&&p.y>=BY-320&&p.y<=BY+BW+20)?1:0;
+  let b=BZ.force!=null?BZ.force:zrNoBoard()?0:(p.x>=BX-1&&p.x<=BX+BW+20&&p.y>=BY-320&&p.y<=BY+BW+20)?1:0;
   if(b&&BZ_TRAVEL[p.type]){if(bzOn()){const q=bzOut(p.x,p.y);p.x=q[0];p.y=q[1];if(p.sx!=null){const s=bzOut(p.sx,p.sy);p.sx=s[0];p.sy=s[1]}}b=0}
   p.bz=b}
 for(const A of[PART,FLOATS]){const push=A.push;A.push=function(){for(let i=0;i<arguments.length;i++)bzTag(arguments[i]);return push.apply(this,arguments)}}
@@ -6874,7 +6876,7 @@ for(const A of[PART,FLOATS]){const push=A.push;A.push=function(){for(let i=0;i<a
 function bzFx(g){BZ.force=null;if(!bzOn()){drawFx(g);return}
   const P=PART.slice(),F=FLOATS.slice(),born=[[],[]];
   const run=b=>{PART.length=0;FLOATS.length=0;for(const p of P)if((p.bz?1:0)===b)PART.push(p);for(const f of F)if((f.bz?1:0)===b)FLOATS.push(f);
-    const n0=PART.length,m0=FLOATS.length;BZ.force=b;if(b)bzDraw(g,()=>drawFx(g));else drawFx(g);born[0].push(...PART.slice(n0));born[1].push(...FLOATS.slice(m0))};
+    const n0=PART.length,m0=FLOATS.length;BZ.force=b;if(b)bzDrawL(g,()=>drawFx(g));else drawFx(g);born[0].push(...PART.slice(n0));born[1].push(...FLOATS.slice(m0))};
   try{run(1);run(0)}finally{BZ.force=null;PART.length=0;FLOATS.length=0;PART.push(...P,...born[0]);FLOATS.push(...F,...born[1])}}
 /* land tiles are cached bitmaps: paint them fine enough to stay crisp at full zoom */
 const landRes=()=>clamp(Math.ceil(IS*BZ.max),2,4);
@@ -7059,6 +7061,86 @@ EV.on('pmeta_switch',()=>{
   try{if(typeof A4!=='undefined'){A4.cmp=null;A4.stripSig='';A4.hdSig=''}}catch(e){}});
 
 window.__dd4=window.__dd4||{};__dd4.v4core={V4C,statsAbandon,v4Watch,get pid(){return PMETA_PID}};
+/* ================= the playmat zooms to your reach (Lab 10-17, Aaron approved Oct 6 2026; docs/handoff/2026-10-06-zoom-reach.md) =================
+   What you see on the mat is your reach: 5x5 at the start, one more row and column per Fame level, the whole 10x10 at Fame 5.
+   The board stays the 10x10 grid underneath; the camera (v4 E's board zoom, BZ) never goes wider than the reach,
+   so cells outside it are never seen and the land is only built inside it (they are 'locked').
+   - base view: the reach plus a sliver of the ring around it (zrPad cells each side, kept inside the board), so heroes on an edge
+     tile still show. That sliver is built as ordinary land ('fringe' cells: terrain and decor, nothing to play). The mouse wheel still zooms in further (up to 3x, or 1.5x past the base).
+   - pieces over the rails: at the base view the board layer (heroes, buildings, decor, bubbles) is no longer clipped to the mat;
+     it may stand over the side and back rails like chess pieces (the ground still stops at the mat's edge).
+   - heroes walk the land at zrWalk() of their speed (Aaron, Oct 6: 75%).
+   - dice: thrown in screen space as before; where they settle maps through the base view to a cell, and they grow with the zoom.
+   - gate: heroes enter at the middle of the view's left edge (cell c0, row r0+floor(n/2)). The camp's road ends at the camp's edge
+     and they leap over the rail onto the land (and back): no road on the table has to line up with the board's.
+   - REACH.force (0 = follow Fame) is set from the admin panel (67-admin). In a match the reach is the match's own and isn't forced.
+   Functions and vars only (no const/let at the top level): setArena() in 24-* runs at load, before this file is reached. */
+var REACH={force:0};
+/* tuning (functions, so setArena can use them at load) */
+function zrPad(){return .3}   // cells of the next ring shown on each side of the reach
+function zrWalk(){return .75} // heroes' walking speed on the land
+/* the view window (in cells: c0 = left/top edge, n = width) and its zoom; animated while the reach grows (target=true: where it is going) */
+function zrBase(target){const A=ARENA;let n=A.n,c=A.c0+A.n/2;const an=A.anim;
+  if(an&&!target){const k=Math.min(1,(performance.now()/1000-an.t0)/1.1);if(k>=1)A.anim=null;else{const e=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2;n=lerp(an.from,A.n,e);c=lerp(an.fc,c,e)}}
+  const v=Math.min(N,n+2*zrPad()),w0=clamp(c-v/2,0,N-v),wc=w0+v/2;
+  return{z:N/v,n:v,c0:w0,cx:BX+wc*CELL,cy:BY+wc*CELL}}
+/* the dice: pulled into the reach (in screen space), walls sized for the zoomed die */
+function zrBounds(){const B=zrBase(true),k=B.z,x0=BCX+(BX+ARENA.c0*CELL-B.cx)*k,y0=BCY+(BY+ARENA.r0*CELL-B.cy)*k,w=ARENA.n*CELL*k,h=CELL*k*.5,hs=HS*k+3;
+  AMIN_X=x0+h;AMAX_X=x0+w-h;AMIN_Y=y0+h;AMAX_Y=y0+w-h;BMIN_X=BX+hs;BMAX_X=BX+BW-hs;BMIN_Y=BY+hs;BMAX_Y=BY+BW-hs}
+/* screen <-> board through the base view (the dice use these, so a wheel zoom mid-throw can't move where they land) */
+function zrToBoard(x,y){const B=zrBase(true);return[B.cx+(x-BCX)/B.z,B.cy+(y-BCY)/B.z]}
+function zrToScreen(x,y){const B=zrBase(true);return[BCX+(x-B.cx)*B.z,BCY+(y-B.cy)*B.z]}
+/* the gate: middle row of the reach, its west cell */
+function zrGR(){return ARENA.r0+Math.floor(ARENA.n/2)}
+function zrGateI(){return idx(ARENA.c0,zrGR())}
+function zrGateC(){return[BX+(ARENA.c0+.5)*CELL,BY+(zrGR()+.5)*CELL]}
+/* where the gate row meets the board's west edge, on screen */
+function zrYE(){return zrToScreen(...zrGateC())[1]}
+/* the same spot just inside the view, in board space (on screen it is (BX, zrYE())): heroes hop between the table and the land here */
+function zrEdgeB(){return[BX+zrBase(true).c0*CELL+1,BY+(zrGR()+.5)*CELL]}
+/* the visible ring just outside the reach is real land too (Aaron, Oct 6: "filled in with typical land tiles"): terrain and decor,
+   but no dice, places or roads; the cell the gate's road crosses keeps its decor clear */
+function zrFringe(c,r){if(inArena(c,r))return false;const B=zrBase(true),a=B.c0+1e-6,b=B.c0+B.n-1e-6;return c+1>a&&c<b&&r+1>a&&r<b}
+function zrStub(cell){return cell.fringe&&cell.r===zrGR()&&cell.c<ARENA.c0}
+/* the gate's road stub runs west from the gate tile to the view's edge, across the sliver of the next ring */
+function zrWestX(){return Math.max(20,(ARENA.c0-zrBase(true).c0)*CELL+6)}
+/* the camp's road ends at the camp's edge and heroes leap over the rail onto the land, and back (Aaron, Oct 6: the bent road
+   never lined up). A waypoint's third element is where the hero ends up; a fourth [x0,y0,x1,y1] makes it a leap on screen between them. */
+function zrCampEdge(){return[CAMP_X+CAMP_C*CT-8,GATE_Y]}
+function zrLand(){return[BX+18,zrYE()]}   // where they land, on screen
+function zrOutWays(){const e=zrCampEdge(),l=zrLand();return[...CAMP_WAY,[e[0],e[1],zrToBoard(l[0],l[1]),[e[0],e[1],l[0],l[1]]],zrGateC()]}
+function zrInWays(){const e=zrCampEdge(),l=zrLand();return[[...zrToBoard(l[0],l[1]),[e[0],e[1]],[l[0],l[1],e[0],e[1]]]]}
+function zrJump(hr,w){if(!w||!w[2])return;if(w[3]){const q=w[3];hr.leap={x0:q[0],y0:q[1],x1:q[2],y1:q[3],to:w[2],t:0,dur:.5+Math.hypot(q[2]-q[0],q[3]-q[1])/400};hr.x=q[0];hr.y=q[1];
+    hr.face=q[2]>q[0]?1:-1;{const z=zrBase(true).z;hr.leap.s0=q[2]>q[0]?1:z;hr.leap.s1=q[2]>q[0]?z:1}try{SFX.whoosh(.35)}catch(e){}return}hr.x=w[2][0];hr.y=w[2][1]}
+/* a leaping hero grows (or shrinks) to the land's zoom on the way, so there's no pop when they land */
+function zrHeroDraw(g,hr,t){const L=hr.leap;if(!L||L.s0==null||L.s0===L.s1){drawHeroFull(g,hr,t);return}const s=lerp(L.s0,L.s1,Math.min(1,L.t));
+  g.save();g.translate(hr.x,hr.y);g.scale(s,s);g.translate(-hr.x,-hr.y);try{drawHeroFull(g,hr,t)}finally{g.restore()}}
+/* in the air: drawn on the table layer, in screen space; on landing they're put back in the space they land in */
+function zrLeapStep(hr,dt){const L=hr.leap;L.t+=dt/L.dur;const k=Math.min(1,L.t),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+  hr.x=lerp(L.x0,L.x1,e);hr.y=lerp(L.y0,L.y1,e)-Math.sin(Math.PI*k)*(30+Math.abs(L.x1-L.x0)*.15);hr.walk=lerp(hr.walk,0,Math.min(1,dt*10));
+  if(k>=1){hr.leap=null;hr.x=L.to[0];hr.y=L.to[1];dust(hr.x,hr.y,.45);try{SFX.thud(.25)}catch(e){}}}
+/* the reach for this much Fame */
+function zrArenaFor(){if(MP.on)return Math.min(N,6+2*Math.floor((G&&G.round||0)/2)); // a match keeps its own: 6 by 6, growing every two rounds
+  return REACH.force||Math.min(N,5+fameLevel(G&&G.fame||0))}
+/* each die grows with the zoom while it is on the mat, and shrinks back on its way to the tray */
+var ZR_BIG={fly:1,settle:1,placed:1,rest:1,wait:1,land:1};
+function zrDieK(d,dt){const on=ZR_BIG[d.state]&&(d.state!=='fly'||d.inBoard),tk=on?zrBase(true).z:1;
+  if(d.zk==null)d.zk=1;d.zk=lerp(d.zk,tk,Math.min(1,dt*(on?6:9)));if(Math.abs(d.zk-tk)<.002)d.zk=tk}
+/* draw fn inside the zoomed board (clip + base transform) */
+function zrZoomed(g,fn){if(!bzOn()){fn();return}g.save();g.beginPath();g.rect(BX,BY,BW,BW);g.clip();g.translate(BZ.tx,BZ.ty);g.scale(BZ.z,BZ.z);try{fn()}finally{g.restore()}}
+/* between rounds the bare mat zooms too, so its grid shows the reach's cells */
+function zrMat(g,t){if(!bzOn()||(R&&R.land))return;zrZoomed(g,()=>{if(BG){const k=BG.width/W;g.drawImage(BG,BX*k,BY*k,BW*k,BW*k,BX,BY,BW,BW)}drawMatLive(g,t)})}
+/* set the reach now (between rounds) or when the round ends; the view eases out to it */
+function zrApply(n,quiet){n=clamp(n,5,N);if(n===ARENA.n)return;const up=n>ARENA.n;ARENA.anim={from:ARENA.n,fc:ARENA.c0+ARENA.n/2,t0:performance.now()/1000};setArena(n);
+  if(quiet)return;SFX.unlock();shakeScreen(.4);if(up)toast(ico('laurel')+'<span><b>Your reach grows</b>'+n+' by '+n+'</span>',4200)}
+/* effects in two spaces: the dice (and anything at a die's spot) live on the screen, the land in board space. On main the view is 1x
+   whenever dice fly, so the two matched; with the view zoomed, effects spawned by the dice are pinned to the fixed table layer. */
+function zrTable(fn){const f0=BZ.force;BZ.force=0;try{return fn()}finally{BZ.force=f0}}
+{const ud=updateDice;updateDice=function(dt,t){return zrTable(()=>ud(dt,t))}}
+{const op=onDiePlaced;onDiePlaced=function(d){const f0=BZ.force;BZ.force=null;try{return op(d)}finally{BZ.force=f0}}}
+/* the unlock ceremony plays its own scene over the mat in screen space */
+function zrNoBoard(){try{return!!(CER&&CER.on)}catch(e){return false}}
+window.__zr={HR,REACH,ARENA,zrBase,zrApply,zrToBoard,zrToScreen,zrGateI,zrYE,BZ:()=>BZ};
 /* ================= the gods' faces: Aaron's portraits, a female and a male form of each ================= */
 /* Aaron's "Eight Divine Personalities" sheet (Oct 4, second sheet), cropped one per god and form, webp q60 at 360x420.
    The drawn portraits that came before were retired to save space. */
@@ -7112,6 +7194,82 @@ function showPick(){const el=$('pick');G.form=G.form||{};const MI=MODE_INFO[G.mo
     b.onclick=()=>{if(G.deity)return;G.form[id]=formOf(id);applyForms();pickGod(id,b);try{SFX.init();SFX.convert()}catch(e){}}});
   $('pickBack').onclick=e=>{e.stopPropagation();SFX.init();SFX.click();showTitle()}}
 
+/* ================= the admin button (Lab 14-17, Aaron approved Oct 6 2026; docs/handoff/2026-10-06-admin-button.md) =================
+   Aaron: "an admin button with all these options in there, so I can turn it on/off when I share a playable demo".
+   Hidden unlock: click the big "Deicity" name on the title screen 5 times (within 2.5 s) to turn admin on or off on this device.
+   It's saved on this device only (localStorage 'deicities-admin'), so anyone playing a shared demo never sees it.
+   While it's on, a wrench button sits in the bottom-right bar, before the gear. It opens a panel with:
+     - Encounter Die faces: the real ladder (default), one of each hazard (1-6), or every face one hazard (0..6). Applies between rounds.
+     - Round: -5 / -1 / +1 / +5 and jumps to 10, 35, 55, 85 (between rounds only).
+     - Reach: follow Fame, or force 5..10 (REACH.force, 65-zoom-reach). Not in a match: the match sets its own.
+     - Influence +100 / +1000 (straight to the counter, so no golden dice get called), Fame +1 level (through gainFame, so builds unlock as usual).
+     - Dice: dungeon, town, treasure, shrine (kept), mini-boss and deep dungeon (one use), and a golden die (the usual arrival).
+     - Admin off.
+   Turning admin off puts the Encounter Die back on the real ladder and the reach back on Fame.
+   In a match (Aaron, Oct 6: the wrench works there too) it acts for this screen's god; on the guest's screen of a live match it changes nothing.
+   Hook: encFacesFor (71-encounter-die) asks admFaces first. */
+const ADM=(()=>{let s={on:false,enc:'real'};try{const j=JSON.parse(localStorage.getItem('deicities-admin')||'null');if(j&&typeof j==='object')s=Object.assign(s,j)}catch(e){}return s})();
+function admSave(){try{localStorage.setItem('deicities-admin',JSON.stringify({on:ADM.on,enc:ADM.enc}))}catch(e){}}
+/* the Encounter Die's faces while admin overrides them; undefined = the real ladder */
+function admFaces(r){if(!ADM.on||ADM.enc==='real')return undefined;if(ADM.enc==='all')return[1,2,3,4,5,6];return Array(6).fill(+ADM.enc)}
+const ADM_WRENCH='<svg viewBox="0 0 24 24" width="26" height="26"><path d="M21.3 6.2l-3.4 3.4-3.1-.6-.6-3.1 3.4-3.4a5.6 5.6 0 0 0-7.1 7.1l-7.6 7.6a2.2 2.2 0 0 0 3.1 3.1l7.6-7.6a5.6 5.6 0 0 0 7.7-6.5z" fill="currentColor"/></svg>';
+/* ---------- the hidden unlock: five clicks on the title's name ---------- */
+const ADM_TAPS=[];
+addEventListener('click',e=>{const h=document.querySelector('#title h1.tname');if(!h||(typeof TITLE_ON!=='undefined'&&!TITLE_ON))return;const r=h.getBoundingClientRect();if(!r.width||e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)return;const now=performance.now();ADM_TAPS.push(now);while(ADM_TAPS.length&&now-ADM_TAPS[0]>2500)ADM_TAPS.shift();
+  if(ADM_TAPS.length>=5){ADM_TAPS.length=0;admSet(!ADM.on)}},true);
+function admSet(on){ADM.on=!!on;if(!ADM.on){ADM.enc='real';admOpen(false);if(REACH.force){REACH.force=0;try{if(!R)zrApply(zrArenaFor(),true)}catch(e){}}}admSave();admButton();
+  try{SFX.unlock();toast('<span class="ic">'+ADM_WRENCH+'</span><span><b>Admin '+(ADM.on?'on':'off')+'</b>'+(ADM.on?'The wrench is in the bottom-right bar':'Hidden on this device')+'</span>',3200)}catch(e){}
+  try{if(G&&G.deity&&!R)encSync(true)}catch(e){}}
+/* ---------- the wrench in the bar, and its panel ---------- */
+function admButton(){let b=document.getElementById('admBtn');
+  if(!ADM.on){if(b)b.remove();return}
+  if(!b){b=document.createElement('button');b.className='ib';b.id='admBtn';b.setAttribute('aria-label','Admin');b.setAttribute('data-tiph','<b>Admin</b>Test tools');b.innerHTML=ADM_WRENCH;
+    b.style.color='#2b1a06';b.addEventListener('click',e=>{e.stopPropagation();try{SFX.click()}catch(_){}admOpen()});const bar=$('bar'),gear=$('gearBtn');bar.insertBefore(b,gear)}}
+function admCss(){if(document.getElementById('admCss'))return;const st=document.createElement('style');st.id='admCss';st.textContent=
+  '#admPop{right:22px;bottom:84px;width:318px;padding:12px 12px 10px;display:flex;flex-direction:column;gap:8px;transform-origin:85% 100%;z-index:41}'+
+  '#admPop h4{margin:0;font:800 11px var(--body);letter-spacing:.16em;color:#c9a65a;display:flex;gap:8px;align-items:baseline}#admPop h4 em,#admPop h4 small{margin-left:auto;letter-spacing:0}'+
+  '#admPop h4 em{font-style:normal;letter-spacing:0;font-size:13px;color:var(--ink)}'+
+  '#admPop .ar{display:flex;flex-wrap:wrap;gap:5px}'+
+  '#admPop button.ab{min-width:30px;height:30px;padding:0 7px;border:0;border-radius:7px;cursor:pointer;background:rgba(0,0,0,.35);color:var(--ink);font:800 13px var(--body);box-shadow:inset 0 0 0 1px rgba(255,210,140,.25);display:flex;align-items:center;justify-content:center;gap:4px;transition:background .12s,transform .08s}'+
+  '#admPop button.ab:hover{background:rgba(255,214,120,.16)}#admPop button.ab:active{transform:translateY(1px)}'+
+  '#admPop button.ab.on{box-shadow:inset 0 0 0 2px #ffd34a,0 0 10px rgba(255,200,90,.45);background:rgba(255,214,120,.14)}'+
+  '#admPop button.ab canvas{border-radius:4px}#admPop small{font:600 11.5px var(--body);color:var(--ink2);opacity:.8}';
+  document.head.appendChild(st)}
+function admOpen(open){let p=document.getElementById('admPop');open=open==null?!(p&&!p.hidden):open;
+  if(!open){if(p)p.hidden=true;return}
+  admCss();try{gearToggle(false)}catch(e){}
+  if(!p){p=document.createElement('div');p.id='admPop';p.className='plaque';p.setAttribute('role','dialog');p.setAttribute('aria-label','Admin');$('stage').appendChild(p);
+    p.addEventListener('pointerdown',e=>e.stopPropagation());
+    addEventListener('pointerdown',e=>{const q=document.getElementById('admPop');if(q&&!q.hidden&&!(e.target.closest&&e.target.closest('#admPop,#admBtn')))q.hidden=true},true)}
+  p.hidden=false;admRender()}
+function admRender(){const p=document.getElementById('admPop');if(!p||p.hidden)return;const busy=!!R,r=G?(G.round||0)+1:1;
+  const btn=(label,act,o)=>{o=o||{};return'<button class="ab'+(o.on?' on':'')+'" data-a="'+act+'"'+(o.tip?' data-tiph="'+o.tip+'"':'')+'>'+label+'</button>'};
+  let h='<h4>ADMIN<small>5 clicks on the title name hides it</small></h4>';
+  h+='<h4>ENCOUNTER DIE</h4><div class="ar">'+btn('≡','enc:real',{on:ADM.enc==='real',tip:'&lt;b&gt;The real ladder&lt;/b&gt;No die before round 10'})+btn('1-6','enc:all',{on:ADM.enc==='all',tip:'&lt;b&gt;One of each hazard&lt;/b&gt;'});
+  for(let v=0;v<=6;v++)h+=btn('<i data-face="moss:'+v+'"></i>','enc:'+v,{on:ADM.enc===String(v),tip:'&lt;b&gt;'+ENC_NAME[v]+'&lt;/b&gt;Every face'});
+  h+='</div><h4>ROUND<em>'+r+'</em></h4><div class="ar">'+['-5','-1','+1','+5'].map(d=>btn(d,'rd:'+d)).join('')+[10,35,55,85].map(n=>btn(n,'rto:'+n,{on:r===n})).join('')+'</div>';
+  if(!MP.on){const f=REACH.force||0;h+='<h4>REACH</h4><div class="ar">'+btn('\u2605','zr:0',{on:!f,tip:'&lt;b&gt;Follow Fame&lt;/b&gt;5 by 5, plus one per Fame level'})+[5,6,7,8,9,10].map(n=>btn(n,'zr:'+n,{on:f===n,tip:'&lt;b&gt;'+n+' by '+n+'&lt;/b&gt;Now, or when this round ends'})).join('')+'</div>'}
+  h+='<h4>INFLUENCE · FAME</h4><div class="ar">'+btn('+100','inf:100')+btn('+1000','inf:1000')+btn('Fame +1 level','fame')+'</div>';
+  h+='<h4>DICE</h4><div class="ar">'+['dungeon','town','treasure','shrine','red','black','golden'].map(t=>btn('<i data-face="'+DT[t].mat+':'+(t==='golden'?6:3)+'"></i>','die:'+t,{tip:'&lt;b&gt;'+DT[t].name+'&lt;/b&gt;'+(t==='red'||t==='black'?'One use':t==='golden'?'Arrives the usual way':'Kept')})).join('')+'</div>';
+  if(busy)h+='<small>Round and Encounter Die changes apply between rounds.</small>';
+  h+='<div class="ar" style="margin-top:2px">'+btn('Admin off','off',{tip:'&lt;b&gt;Turn admin off&lt;/b&gt;Hides the wrench on this device. 5 clicks on the title name bring it back'})+'</div>';
+  p.innerHTML=h;
+  for(const i of p.querySelectorAll('i[data-face]')){const[m,v]=i.dataset.face.split(':');try{i.replaceWith(faceCanvas(m,+v,20))}catch(e){}}
+  for(const b of p.querySelectorAll('button.ab'))b.addEventListener('click',e=>{e.stopPropagation();admAct(b.dataset.a)})}
+function admAct(a){const[k,v]=a.split(':');try{SFX.click()}catch(e){}
+  if(k==='off'){admSet(false);return}
+  if(!G||!G.deity){admRender();return}
+  // the guest's screen in a live match mirrors the host's table: its own changes would only be overwritten
+  if(MP.mirror){try{SFX.error()}catch(e){}admRender();return}
+  if(k==='enc'){ADM.enc=v;admSave();if(!R)encSync(true)}
+  else if(k==='zr'){if(!MP.on){REACH.force=+v;if(!R)try{zrApply(zrArenaFor(),!+v)}catch(e){}}}
+  else if(k==='rd'||k==='rto'){if(R){try{SFX.error()}catch(e){}admRender();return}const cur=(G.round||0)+1,to=k==='rto'?+v:Math.max(1,cur+(+v));G.round=to-1;try{roundUpdate()}catch(e){}save();encSync(true)}
+  else if(k==='inf'){G.worship+= +v;floatText(1160,90,'+'+v,'#fff2b0',null,20);try{hudUpdate();SFX.worship()}catch(e){}save()}
+  else if(k==='fame'){const lv=fameLevel(G.fame||0),need=FAME_AT(lv+1)-(G.fame||0);gainFame(Math.max(1,need),120,90)}
+  else if(k==='die'){if(v==='golden'){GOLD.q++;checkGolden()}else{const def=grantDie(v,null,(v==='red'||v==='black')?{once:1}:{});if(def&&MP.on)def.hand=meGod()}}
+  admRender()}
+setTimeout(()=>{try{admButton()}catch(e){console.error(e)}},0);
+window.__adm={ADM,set:admSet,open:admOpen,act:admAct};
 /* ================= v4 F: art export for the sprite gallery ================= */
 /* dist/sprite-gallery.html (tools/build-gallery.py) loads this same game code with window.__DD_NO_BOOT set and draws every sprite
    through window.__ddArt, so an edit to any drawing function shows up in the game and in the gallery alike.
@@ -7662,7 +7820,7 @@ function drawLessonFx(g,t){if(!G||!G.les||!R||!R.land)return;
       g.fillStyle='#fff6d8';g.strokeStyle='#2b1a06';g.lineWidth=2;g.beginPath();g.arc(L.cx,y,8,0,7);g.fill();g.stroke();
       g.fillStyle='#ffe27a';g.beginPath();g.moveTo(L.cx-7,y+12);g.lineTo(L.cx+7,y+12);g.lineTo(L.cx,y+20);g.closePath();g.fill();g.restore()})}
   if((G.round||0)<2){const h=G.heroes.find(x=>x.id===G.introId)||G.heroes.find(x=>believes(x)),hr=h&&HR[h.id];if(!hr||!bzHero(hr)||hr.state==='dead')return;
-    bzDraw(g,()=>{const D=deityOf(G.deity),b=Math.abs(Math.sin(t*3.2))*4,x=hr.x+3,y=hr.y-62-b;g.save();g.font='800 10.5px "Alegreya Sans",sans-serif';const txt='Protect your follower',w=g.measureText(txt).width+26;
+    bzDrawL(g,()=>{const D=deityOf(G.deity),b=Math.abs(Math.sin(t*3.2))*4,x=hr.x+3,y=hr.y-62-b;g.save();g.font='800 10.5px "Alegreya Sans",sans-serif';const txt='Protect your follower',w=g.measureText(txt).width+26;
       g.fillStyle='rgba(14,8,4,.82)';rrect(g,x-w/2,y-9,w,18,9);g.fill();g.strokeStyle=D.c;g.lineWidth=1.5;g.stroke();drawEmblem(g,x-w/2+10,y,5.5,G.deity);
       g.fillStyle='#fff2d8';g.textAlign='left';g.textBaseline='middle';g.fillText(txt,x-w/2+19,y+.5);g.fillStyle=D.c;g.beginPath();g.moveTo(x-5,y+9);g.lineTo(x+5,y+9);g.lineTo(x,y+15);g.closePath();g.fill();g.restore()})}}
 
@@ -7713,7 +7871,9 @@ Object.defineProperties(__dd5,{HR:{get:()=>HR},SPD:{get:()=>SPD},TUT:{get:()=>TU
    The land raises it, not the pedestal. On a lessons run it waits until the unlock ceremony is done.
    Hooks: buildLand skips it as a place and calls encPlace; updateRound calls encUpdate; the walk step calls encEnter; updateHeroes runs
    encHeld for the 'enc' state; the board draw calls encItems and skips heroes with encHide; clicks try encClick first; canvasTip tries
-   encTip; startHold calls encGrabJoin; tryThrow starts with encJoin (encMissing/encNeedFx are the fallback). */
+   encTip; startHold calls encGrabJoin; tryThrow starts with encJoin (encMissing/encNeedFx are the fallback).
+   Lab 15 + 17 (Oct 6): traps are just holes in the road and rearm in ENC_JAM (10 s); heroes+1 spirits scatter, lap the land once, then hunt;
+   the roaming monster erupts out of its hole, and its lair point follows it so the god's bolt lands on it. encFacesFor asks the admin panel first (67-admin). */
 DT.encounter={name:'Encounter Die',mat:'moss',cost:0,upg:0,enc:1,faces:()=>[0,0,0,0,1,1],tip:'The land fights back. It rides in every throw.'};
 FACE_RULE.encounter={max:6,cost:0};SHARD_COL.encounter='#a6d872';
 NEWDIE_TXT.encounter=['Encounter Die','The land fights back'];
@@ -7736,7 +7896,7 @@ const ENC_LADDER=[[10,[0,0,0,0,1,1]],[15,[0,0,0,1,1,1]],[20,[0,0,0,1,1,2]],[25,[
 const ENC_NAME=['Quiet Road','Strangling Vines','Spike Trap','The Pit','Angry Spirits','Trap Field','Roaming Monster'];
 const ENC_BY=['','strangling vine','spike trap','pit','angry spirit','spike trap','roaming monster'];
 function encStepAt(r){let s=-1;for(let i=0;i<ENC_LADDER.length;i++)if(r>=ENC_LADDER[i][0])s=i;return s}
-function encFacesFor(r){const s=encStepAt(r);return s<0?null:ENC_LADDER[s][1].slice()}
+function encFacesFor(r){const af=admFaces(r);if(af!==undefined)return af;const s=encStepAt(r);return s<0?null:ENC_LADDER[s][1].slice()}
 const encDef=()=>G&&G.dice&&G.dice.find(d=>d.type==='encounter');
 function encSync(quiet){if(!G||!G.deity||G.lost||R||(typeof TITLE_ON!=='undefined'&&TITLE_ON)||G.intro===1||INTRO.on)return;if(CER.on||(G.les&&!G.cerDone))return;
   const r=(G.round||0)+1,f=encFacesFor(r),def=encDef();
@@ -7760,7 +7920,7 @@ function encNeedFx(){floatText(BCX,BCY-40,'need','#ff9a8a','die:encounter',22);f
 /* ---------- the throw lands: the die snaps onto the nearest road and becomes its hazard ---------- */
 function encPlace(){R.enc={hz:[],fx:[],fly:[]};const d=R.dice.find(x=>x.def.type==='encounter');if(!d)return;
   const k=R.dice.indexOf(d),T=.15+k*.16,v=clamp(d.value||0,0,6),cells=R.cells,dc=cells[idx(d.cell[0],d.cell[1])];
-  const ok=c=>c.road&&!c.loc&&!c.locked&&!(c.c===0&&c.r===GATE_ROW);
+  const ok=c=>c.road&&!c.loc&&!c.locked&&!(c.i===zrGateI());
   const dd=(a,b)=>Math.hypot(a.c-b.c,a.r-b.r);
   const cand=cells.filter(ok).sort((a,b)=>dd(a,dc)-dd(b,dc)||b.links.size-a.links.size);
   R.enc.die=d;R.enc.v=v;
@@ -7866,14 +8026,14 @@ function encMon(H,dt){const M=H.M,L=H.L,E=L.enemy;
   if(E)E.flash=Math.max(0,E.flash-dt);
   if(R.phase!=='adventure'&&M.state!=='rise'){if(M.state!=='sink'){M.state='sink';M.sink=0;for(const o of L.fighters)if(o.state==='fight'){o.state='think';o.loc=null}L.fighters=[];try{SFX.mine()}catch(e){}puff(M.x,M.y,10,'#4a3a2a')}M.sink+=dt;return}
   if(M.state==='sink'){M.state='roam'}
-  if(M.state==='rise'){if(!encOn(H))return;M.rise=Math.min(1,M.rise+dt*.8);if(M.rise>=1&&R.phase==='adventure'){M.state='roam';try{const v=MON_VOICE[clamp(L.face,1,10)];v?SFX.scream(v):SFX.grunt(90)}catch(e){}}return}
+  if(M.state==='rise'){if(!encOn(H))return;encErupt(H,dt);M.rise=Math.min(1,M.rise+dt*.8);if(M.rise>=1&&R.phase==='adventure'){M.state='roam';try{const v=MON_VOICE[clamp(L.face,1,10)];v?SFX.scream(v):SFX.grunt(90)}catch(e){}}return}
   if(L.state==='cancelled'){L.state='open';L.fighters=[];M.state='roam';L.goneT=0}
   if(M.state==='roam'){
     const prey=R.out.filter(o=>encReach(o)&&o.state!=='enc'&&o.state!=='fight'&&o.state!=='cheer'&&bzHero(o));
     if(!prey.length)return;let tgt=null,bd=1e9;for(const o of prey){const d=dist(o.x,o.y,M.x,M.y);if(d<bd){bd=d;tgt=o}}
     if(bd<20){encEngage(H,tgt);return}
     const dx=tgt.x-M.x,dy=tgt.y-M.y,d=Math.hypot(dx,dy)||1,st=Math.min(d,SPEED*.62*dt);if(Math.abs(dx)>.5)M.face=dx>0?1:-1;
-    M.x=clamp(M.x+dx/d*st,BX+8,BX+BW-8);M.y=clamp(M.y+dy/d*st,BY+14,BY+BW-4);M.cell=cellOf(M.x,M.y);M.walk=(M.walk||0)+dt;
+    M.x=clamp(M.x+dx/d*st,BX+8,BX+BW-8);M.y=clamp(M.y+dy/d*st,BY+14,BY+BW-4);M.cell=cellOf(M.x,M.y);L.cx=M.x;L.cy=M.y-12;L.mo=1;M.walk=(M.walk||0)+dt;
     // heavy footfalls off the road
     M.stepT-=dt;if(M.stepT<=0){M.stepT=.42;try{SFX.thud(.25)}catch(e){}if(!R.cells[M.cell].road)puff(M.x+rr(-4,4),M.y+2,2,'#6a5a42')}
     return}
@@ -7887,6 +8047,24 @@ function encMon(H,dt){const M=H.M,L=H.L,E=L.enemy;
 function encEngage(H,hr){const M=H.M,L=H.L;M.state='fight';L.cx=M.x;L.cy=M.y-12;L.cell=R.cells[M.cell];L.mo=1;L.state='open';
   if(hr.state==='act'){hr.pray=false;hr.atTown=false;hr.loc=null}arrive(hr,L);try{SFX.whoosh(1);SFX.thud(.7)}catch(e){}shakeScreen(.3);ring(M.x,M.y-10,'#ff5a3a',true)}
 
+/* ---------- the roaming monster erupts out of its hole: rock, fire, a shaking table ---------- */
+const ENC_FIRE=['#fff2b0','#ffd34a','#ff9a2a','#ff5a1a','#d8301a'];
+function encErupt(H,dt){const M=H.M,x=M.x,y=M.y;
+  if(M.erT==null){M.erT=R.t;try{SFX.slam();SFX.thud(1);SFX.mine();SFX.crunch();setTimeout(()=>{try{SFX.sizzle()}catch(e){}},120)}catch(e){}shakeScreen(.9);
+    bits(x,y-4,30,['#6a5a42','#4a3e2e','#8a7a5a','#3a2e22','#5a4a36'],2.8,320);puff(x,y-4,14,'#3a2e26');
+    PART.push({x,y,life:0,max:.6,type:'ring',col:'#ff7a2a',big:1});PART.push({x,y:y+4,life:0,max:.9,type:'pillar',col:'255,110,30'});
+    for(let i=0;i<46;i++){const a=-Math.PI/2+rr(-.9,.9),v=rr(80,300);PART.push({x:x+rr(-8,8),y:y-2,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:0,max:rr(.4,1),r:rr(1.6,3.6),col:pick(ENC_FIRE),type:'glow',drag:1.6})}}
+  // while it climbs out: a rumble, licks of flame and the odd stone
+  shakeScreen(Math.min(.08,dt*2.4),.5);
+  if(rand()<dt*38){const a=-Math.PI/2+rr(-.5,.5),v=rr(60,170);PART.push({x:x+rr(-12,12),y:y-rr(0,6),vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:0,max:rr(.35,.8),r:rr(1.4,3),col:pick(ENC_FIRE),type:'glow',drag:1.4})}
+  if(rand()<dt*7)bits(x+rr(-10,10),y-2,2,['#6a5a42','#4a3e2e','#3a2e22'],2.2,200);
+  if(rand()<dt*5)puff(x+rr(-8,8),y-8,2,'#2e2620')}
+/* the burning mouth of the hole behind it while it rises */
+function encEruptDraw(g,H,x,y,t){const M=H.M,k=M.rise;g.save();g.globalCompositeOperation='lighter';const a=(.55+Math.sin(t*22)*.15)*(1-k*.6);
+  const gr=g.createRadialGradient(x,y,1,x,y,30);gr.addColorStop(0,'rgba(255,220,120,'+a+')');gr.addColorStop(.4,'rgba(255,110,30,'+(a*.8)+')');gr.addColorStop(1,'rgba(200,30,10,0)');g.fillStyle=gr;g.beginPath();g.ellipse(x,y,30,14,0,0,7);g.fill();
+  g.strokeStyle='rgba(255,170,60,'+(a*.9)+')';g.lineWidth=1.6;g.lineCap='round';g.beginPath();
+  for(let i=0;i<5;i++){const an=i/5*6.28+H.seed,r0=8,r1=18+Math.sin(t*9+i)*3;g.moveTo(x+Math.cos(an)*r0,y+Math.sin(an)*r0*.45);g.lineTo(x+Math.cos(an+.3)*r1,y+Math.sin(an+.3)*r1*.45)}g.stroke();
+  g.restore()}
 /* ---------- the god's hand ---------- */
 function encClick(x,y,bx,by){if(!liveLand()||!R.enc)return false;
   for(const H of R.enc.hz){if(!encOn(H))continue;
@@ -7896,13 +8074,13 @@ function encClick(x,y,bx,by){if(!liveLand()||!R.enc)return false;
     if(H.kind===3&&H.held&&H.fall<0&&dist(bx,by,H.x,H.y-8)<26){const hr=H.held;H.cl--;touch(bx,by);try{SFX.grunt(hr.pitch);SFX.crunch()}catch(e){}dust(H.x,H.y+4,.6);
       if(H.cl<=0){encRelease(hr,H);H.spent=true;H.sealT=R.t+.3;hr.x=H.x+rr(-6,6);hr.y=H.y+18;encSave(hr,H,true);encXp(hr,H)}return true}
     if(H.kind===2&&dist(bx,by,H.x,H.y)<19){touch(bx,by);
-      if(H.armed){H.armed=false;H.jamT=20;H.jamAt=R.t;try{SFX.forge();SFX.clang()}catch(e){}sparks(H.x+14,H.y,8,'#ffd27a');bits(H.x+13,H.y,5,['#8a5a2a','#5a3a18'],2,90);shakeScreen(.15);
+      if(H.armed){H.armed=false;H.jamT=ENC_JAM;H.jamAt=R.t;try{SFX.forge();SFX.clang()}catch(e){}sparks(H.x+14,H.y,8,'#ffd27a');bits(H.x+13,H.y,5,['#8a5a2a','#5a3a18'],2,90);shakeScreen(.15);
         for(const o of R.out)if((o.state==='walk'||o.state==='leave')&&o.path&&o.path[o.pi]===H.cell.i&&dist(o.x,o.y,H.x,H.y)<CELL*1.5){encSave(o,H,false);encXp(o,H)}}
       else SFX.tick();return true}
     if(H.kind===4&&H.sp)for(const s of H.sp){if(s.dead||R.t-s.t0<.4)continue;if(dist(bx,by,s.x,s.y)<17){s.dead=R.t;touch(s.x,s.y);try{SFX.ghost();SFX.smack()}catch(e){}shakeScreen(.2);
       for(let i=0;i<26;i++){const a=rand()*6.28,v=rr(40,180);PART.push({x:s.x,y:s.y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-30,life:0,max:rr(.4,.9),r:rr(1.4,3),col:pick(['#e0a0ff','#ff6a9a','#ffffff']),type:'glow',drag:2})}
       const T=s.tgt;if(T&&encReach(T)&&dist(s.x,s.y,T.x,T.y-18)<30){encSave(T,H,false);encXp(T,H)}return true}}
-    if(H.kind===6&&H.M&&(H.M.state==='roam'||H.M.state==='fight')&&dist(bx,by,H.M.x,H.M.y-12)<22){clickEnemy(H.L);return true}}
+    if(H.kind===6&&H.M&&(H.M.state==='roam'||H.M.state==='fight')&&dist(bx,by,H.M.x,H.M.y-12)<22){if(H.M.state==='roam'){H.L.cx=H.M.x;H.L.cy=H.M.y-12;H.L.mo=1}clickEnemy(H.L);return true}}
   return false}
 function encTip(x,y){if(!liveLand()||!R.enc)return'';const[bx,by]=bzIn(x,y);
   for(const H of R.enc.hz){if(!encOn(H))continue;
@@ -7951,33 +8129,36 @@ function encGrip(g,H,hr,t){const n=Math.max(0,H.cl),x=hr.x,y=hr.y;g.save();g.lin
     g.strokeStyle='#6f9e3e';g.lineWidth=1;g.stroke();g.fillStyle='#1f3214';g.beginPath();g.moveTo(x-ox*.6-1,top+1);g.lineTo(x-ox*.6+2*side,top-3);g.lineTo(x-ox*.6+1,top+2);g.fill();
     g.fillStyle='#7fae46';g.beginPath();g.ellipse(x+ox*.4,y-5-i*2,2.6,1.3,side*.6,0,7);g.fill()}
   g.restore()}
-/* the spike trap: armed spikes stand up with a slow cold glint; jammed, they sink flush, the plate goes dull and a wedge sits in the gear */
-/* the spike trap: at rest the spikes are down, only their tips glint in the holes. A step springs them up through the plate.
-   Jammed: plate dull and dark, a wedge in the gear, and a little bar under it filling until it rearms */
-function encTrapPlate(g,x,y,arm){g.fillStyle='rgba(0,0,0,.3)';g.beginPath();g.ellipse(x,y+5,18,6,0,0,7);g.fill();
-  g.fillStyle=arm?'#3e3b36':'#2c2a26';rrect(g,x-15,y-5,30,13,4);g.fill();
-  const pg=g.createLinearGradient(0,y-7,0,y+5);pg.addColorStop(0,arm?'#8c877c':'#5e5a52');pg.addColorStop(1,arm?'#6a665d':'#45423c');g.fillStyle=pg;rrect(g,x-15,y-7,30,11,4);g.fill();
-  g.strokeStyle=arm?'rgba(255,255,255,.18)':'rgba(255,255,255,.06)';g.lineWidth=1;g.beginPath();g.moveTo(x-12,y-6.3);g.lineTo(x+12,y-6.3);g.stroke();
-  const holes=[];for(let r=0;r<2;r++)for(let c=0;c<3;c++)holes.push([x-8+c*8,y-4+r*4.5]);
-  for(const[hx,hy]of holes){g.fillStyle='#14120f';g.beginPath();g.ellipse(hx,hy,2.1,1.1,0,0,7);g.fill()}return holes}
-function encTrap(g,H,t){const x=H.x,y=H.y+4,arm=H.armed;g.save();const holes=encTrapPlate(g,x,y,arm);
+/* ---------- traps: just holes in the road ---------- */
+const ENC_JAM=10; // seconds a jammed trap stays jammed (was 20)
+/* six dark slots punched into the road, a little crumbled at the edges, with the spike tips down in them */
+/* the slots follow the road: across it on a road that runs left-right, along it on one that runs up-down */
+function encTrapVert(H){if(!H||!H.cell)return false;if(H.vert==null){const c=H.cell,ls=[...c.links];H.vert=ls.length>0&&ls.every(i=>Math.abs(i-c.i)===N)}return H.vert}
+function encTrapPlate(g,x,y,arm,H){const holes=[],v=encTrapVert(H);if(v){for(let r=0;r<3;r++)for(let c=0;c<2;c++)holes.push([x-3.5+c*7+(r%2?1:0),y-7+r*5.5])}else for(let r=0;r<2;r++)for(let c=0;c<3;c++)holes.push([x-8+c*8+(r?1:0),y-3+r*5]);
+  for(const[hx,hy]of holes){g.fillStyle='rgba(60,46,30,.35)';g.beginPath();g.ellipse(hx,hy+.3,3.2,1.9,0,0,7);g.fill();
+    g.fillStyle='#120e0a';g.beginPath();g.ellipse(hx,hy,2.3,1.25,0,0,7);g.fill();
+    g.fillStyle='rgba(230,214,180,.28)';g.beginPath();g.ellipse(hx,hy+1.1,2.2,.55,0,0,Math.PI);g.fill()}
+  return holes}
+function encTrap(g,H,t){const x=H.x,y=H.y+4,arm=H.armed,v=encTrapVert(H);g.save();const holes=encTrapPlate(g,x,y,arm,H);
   const sp=H.spring!=null?R.t-H.spring:9,up=sp<.07?sp/.07:sp<.4?1:sp<.65?1-(sp-.4)/.25:0,L=up*14*(sp<.12?1+.15*Math.sin(sp*80):1);
-  if(L>0){for(const[hx,hy]of holes){const gr=g.createLinearGradient(hx-2,0,hx+2,0);gr.addColorStop(0,'#5a6168');gr.addColorStop(.5,'#e4e9ee');gr.addColorStop(1,'#7a828a');
+  if(L>0){if(sp<.25){g.fillStyle='rgba(120,100,70,'+(.5*(1-sp/.25))+')';g.beginPath();g.ellipse(x,y,v?8:16,v?11:5,0,0,7);g.fill()}
+    for(const[hx,hy]of holes){const gr=g.createLinearGradient(hx-2,0,hx+2,0);gr.addColorStop(0,'#5a6168');gr.addColorStop(.5,'#e4e9ee');gr.addColorStop(1,'#7a828a');
       g.fillStyle=gr;g.beginPath();g.moveTo(hx-1.9,hy);g.lineTo(hx,hy-L);g.lineTo(hx+1.9,hy);g.closePath();g.fill();
       if(!H.safe&&sp<.4){g.fillStyle='rgba(200,30,20,.85)';g.beginPath();g.moveTo(hx-.8,hy-L+2.6);g.lineTo(hx,hy-L);g.lineTo(hx+.8,hy-L+2.6);g.fill()}}}
-  else if(arm){// armed and waiting: just the tips in the holes, catching the light now and then
-    for(let i=0;i<holes.length;i++){const[hx,hy]=holes[i],gl=Math.max(0,Math.sin(t*1.7+i*1.3+H.seed));g.fillStyle='rgba(220,228,235,'+(.55+gl*.45)+')';g.beginPath();g.moveTo(hx-1,hy+.2);g.lineTo(hx,hy-1.8);g.lineTo(hx+1,hy+.2);g.fill()}}
-  if(!arm){g.fillStyle='rgba(0,0,0,.22)';rrect(g,x-15,y-7,30,13,4);g.fill();
-    const gx=x+16,gy=y-1;g.fillStyle='#2e2c29';g.beginPath();for(let i=0;i<16;i++){const a=i/16*6.28,r=i%2?3.6:4.8;g.lineTo(gx+Math.cos(a)*r,gy+Math.sin(a)*r*.8)}g.closePath();g.fill();g.fillStyle='#55524c';g.beginPath();g.arc(gx,gy,1.4,0,7);g.fill();
+  else if(arm){// waiting: only a tip catching the light now and then, down in a hole
+    for(let i=0;i<holes.length;i++){const[hx,hy]=holes[i],gl=Math.max(0,Math.sin(t*1.7+i*1.3+H.seed));if(gl<.35)continue;g.fillStyle='rgba(220,228,235,'+(gl*.8)+')';g.beginPath();g.moveTo(hx-.8,hy+.3);g.lineTo(hx,hy-1.2);g.lineTo(hx+.8,hy+.3);g.fill()}}
+  if(!arm){// jammed: the gear at the roadside with a wedge in it, and the rearm bar under the holes
+    const gx=x+(v?13:16),gy=y;g.fillStyle='#2e2c29';g.beginPath();for(let i=0;i<16;i++){const a=i/16*6.28,r=i%2?3.6:4.8;g.lineTo(gx+Math.cos(a)*r,gy+Math.sin(a)*r*.8)}g.closePath();g.fill();g.fillStyle='#55524c';g.beginPath();g.arc(gx,gy,1.4,0,7);g.fill();
     g.fillStyle='#9a6a36';g.beginPath();g.moveTo(gx-2,gy-7);g.lineTo(gx+1.5,gy-7.5);g.lineTo(gx+.2,gy-1);g.closePath();g.fill();g.strokeStyle='#5a3a18';g.lineWidth=.8;g.stroke();
-    // the rearm bar under the plate
-    const p=clamp(1-H.jamT/20,0,1),bx=x-14,by=y+11;g.fillStyle='rgba(0,0,0,.6)';rrect(g,bx-1,by-1,30,4.6,2.3);g.fill();g.fillStyle='rgba(225,225,225,.85)';rrect(g,bx,by,28*p,2.6,1.3);g.fill()}
+    const p=clamp(1-H.jamT/ENC_JAM,0,1),bx=x-14,by=y+(v?13:8);g.fillStyle='rgba(0,0,0,.6)';rrect(g,bx-1,by-1,30,4.6,2.3);g.fill();g.fillStyle='rgba(225,225,225,.85)';rrect(g,bx,by,28*p,2.6,1.3);g.fill()}
   if(sp>.65)H.safe=0;
   g.restore()}
-/* a trap of the trap field in the air: spinning plate, high arc, shadow below */
+/* a trap of the trap field in the air: a spinning bundle of spikes, high arc, shadow below; it lands as holes */
 function encFlyDraw(g,f,t){const k=clamp((R.t-f.t0)/f.dur,0,1),H=f.H,x=lerp(f.sx,H.x,k),gy=lerp(f.sy,H.y+4,k),hh=4*f.h*k*(1-k),y=gy-hh;
-  g.save();g.fillStyle='rgba(0,0,0,'+(.15+.25*k)+')';g.beginPath();g.ellipse(x,gy+5,10+8*k,3+3*k,0,0,7);g.fill();
-  g.translate(x,y);g.rotate(k*f.spin);g.scale(1,.7+.3*Math.abs(Math.cos(k*f.spin*.7)));g.translate(-x,-y);encTrapPlate(g,x,y,true);g.restore()}
+  g.save();g.fillStyle='rgba(0,0,0,'+(.15+.25*k)+')';g.beginPath();g.ellipse(x,gy+5,8+6*k,2.5+2.5*k,0,0,7);g.fill();
+  g.translate(x,y);g.rotate(k*f.spin);
+  for(let i=0;i<6;i++){const a=i/6*6.28;g.save();g.rotate(a);const gr=g.createLinearGradient(-2,0,2,0);gr.addColorStop(0,'#5a6168');gr.addColorStop(.5,'#e4e9ee');gr.addColorStop(1,'#7a828a');g.fillStyle=gr;g.beginPath();g.moveTo(-1.8,-2);g.lineTo(0,-11);g.lineTo(1.8,-2);g.closePath();g.fill();g.restore()}
+  g.fillStyle='#3a3834';g.beginPath();g.arc(0,0,3.4,0,7);g.fill();g.restore()}
 /* the pit: a crumbling dark hole; once it has taken its one, boards and rubble seal it */
 function encPit(g,H,t){const x=H.x,y=H.y+2,R2=encRnd(H);g.save();
   g.fillStyle='rgba(40,28,18,.55)';g.beginPath();g.ellipse(x,y+1,22,12,0,0,7);g.fill();
@@ -8008,7 +8189,7 @@ function encMonDraw(g,H,t){const M=H.M,L=H.L,E=L.enemy,lvl=L.face;g.save();
   let x=M.x,y=M.y,sc=1.3;if(M.state==='fight'){[x,y]=monPos(L);M.x=x;M.y=y}
   // a dark stain where it walks, so it reads as the land's own
   const gr=g.createRadialGradient(x,y+1,1,x,y+1,20);const pu=.4+Math.sin(t*4)*.12;gr.addColorStop(0,'rgba(150,10,0,'+pu+')');gr.addColorStop(1,'rgba(150,10,0,0)');g.fillStyle=gr;g.beginPath();g.ellipse(x,y+1,22,9,0,0,7);g.fill();
-  const rise=M.state==='rise'?M.rise:M.state==='sink'?Math.max(0,1-M.sink*1.4):1;
+  const rise=M.state==='rise'?M.rise:M.state==='sink'?Math.max(0,1-M.sink*1.4):1;if(M.state==='rise')encEruptDraw(g,H,x,y,t);
   if(rise<1){g.save();g.beginPath();g.rect(x-40,y-80,80,80+2);g.clip();const bob=M.state==='roam'?Math.abs(Math.sin((M.walk||0)*8))*1.5:0;drawMonster(g,x,y+(1-rise)*34,lvl,sc,t,E&&E.flash>0,'normal');g.restore()}
   else{const bob=M.state==='roam'?Math.abs(Math.sin((M.walk||0)*8))*1.5:0;g.save();if(M.face<0){g.translate(x,0);g.scale(-1,1);g.translate(-x,0)}drawMonster(g,x,y-bob,lvl,sc,t,E&&E.flash>0,'normal');g.restore()}
   if(rise>.6&&E){const by=y-35;if(E.hp<E.max||L.fighters.length)drawBar(g,x,by,24,E.hp/E.max,'#e9523f',3.5);
@@ -8024,7 +8205,7 @@ function encSign(g,H,t){const s=encScale(H);if(s<=0)return;const x=H.x+13,y=H.y+
 /* the Encounter Die rolls to its spot: red-lit, a quarter turn and a heavy clomp per cell, a slam where it stops */
 function encAngry(d,on){if(!document.getElementById('encCss')){const st=document.createElement('style');st.id='encCss';st.textContent='.die.encangry .rig{filter:drop-shadow(0 0 5px rgba(220,40,20,.95)) drop-shadow(0 0 16px rgba(140,0,0,.85))}';document.head.appendChild(st)}d.el.classList.toggle('encangry',!!on)}
 function encRoll(d,steps,v){if(!R||!R.enc)return;const E=R.enc;E.rolling=1;encAngry(d,true);try{SFX.rattle(d.mat,1);SFX.thud(.6)}catch(e){}shakeScreen(.2);
-  const go=i=>{if(!R||R.enc!==E)return;const last=i>=steps.length-1,c=steps.length?steps[i]:null,tx=c?c.cx:d.x,ty=c?c.cy:d.y;let tq;
+  const go=i=>{if(!R||R.enc!==E)return;const last=i>=steps.length-1,c=steps.length?steps[i]:null,tp=c?zrToScreen(c.cx,c.cy):[d.x,d.y],tx=tp[0],ty=tp[1];let tq;
     if(last){const fi=d.faceVals?d.faceVals.indexOf(d.value):-1;tq=fi>=0?snapUp(Q.fromTo(FN[fi],[0,0,1])):d.q}
     else{const dx=tx-d.x,dy=ty-d.y,L=Math.hypot(dx,dy)||1;tq=Q.mul(Q.axis(-dy/L,dx/L,0,Math.PI/2),d.q)}
     d.state='hop';d.dest=null;d.hop={sx:d.x,sy:d.y,sz:d.z||0,tx,ty,tz:0,t:0,dur:last?.36:.27,h:last?44:20,sq:d.q,tq,then:()=>{
@@ -8033,7 +8214,7 @@ function encRoll(d,steps,v){if(!R||!R.enc)return;const E=R.enc;E.rolling=1;encAn
       if(last)encLand(d,v);else go(i+1)}}};
   go(0)}
 function encLand(d,v){if(!R||!R.enc)return;const E=R.enc;E.rolling=0;d.el.classList.remove('flash');void d.el.offsetWidth;d.el.classList.add('flash');
-  setTimeout(()=>{if(!R||R.enc!==E)return;const fx=d.x,fy=d.y;d.vis=false;d.state='land';encAngry(d,false);
+  setTimeout(()=>{if(!R||R.enc!==E)return;const[fx,fy]=zrToBoard(d.x,d.y);d.vis=false;d.state='land';encAngry(d,false);
     if(E.field){// the die bursts and its three traps fly, spinning, to their cells and slam down
       try{SFX.crunch();SFX.whoosh(1.2)}catch(e){}shakeScreen(.4);bits(fx,fy,18,['#3a4136','#5c7a3e','#82a85a','#1b1f19'],2.4,220);puff(fx,fy,10,'#4a5444');
       E.hz.forEach((H,i)=>E.fly.push({H,sx:fx,sy:fy,t0:R.t+i*.14,dur:.8+i*.08,h:150+i*40,spin:rr(8,14)*(i%2?1:-1)}));return}
@@ -8066,22 +8247,31 @@ function encDebris(x,y,n,big){const E=R&&R.enc;if(!E)return;
   for(let i=0;i<Math.round(n*.6);i++){const a=-Math.PI/2+rr(-1.8,1.8),s=rr(90,big?320:240);E.fx.push({k:'chip',x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,rot:rand()*6,vr:rr(-20,20),t0:R.t,max:rr(.5,.9),col:pick(['#1f3214','#2a4018','#5a4a2a']),sz:rr(1.6,3)})}
   for(let i=0;i<4;i++)PART.push({x,y,vx:rr(-70,70),vy:rr(-120,-40),life:0,max:rr(.4,.7),r:rr(1.2,2),col:'#c8e870',type:'glow',drag:1.5});
   E.fx.push({k:'slash',x,y,a:rr(-.9,.9),t0:R.t,max:.18})}
-/* ---------- angry spirits: three of them spiral up out of the ground, hold still a breath, then each goes for a hero.
-   They spin into whoever they chase until the god clicks them away ---------- */
-function encSpirits(H,hr){H.spent=true;H.sp=[];try{SFX.ghost();SFX.whoosh(1.1)}catch(e){}shakeScreen(.3);
-  for(let i=0;i<3;i++)H.sp.push({a0:i*2.094,t0:R.t,x:H.x,y:H.y,tgt:null,cd:0,dead:0,seed:ri(1,9999),trail:[],spin:rand()*6});
+/* ---------- angry spirits: one more than there are adventurers. They burst out of the cairn, scatter fast to the edges of the land,
+   run one lap around it, then each goes for an adventurer ---------- */
+function encSpirits(H,hr){H.spent=true;H.sp=[];try{SFX.ghost();SFX.whoosh(1.1)}catch(e){}shakeScreen(.35);
+  const n=clamp(G.heroes.filter(h=>h.hp>0).length+1,2,8),a0=rand()*6.28;
+  for(let i=0;i<n;i++)H.sp.push({a0:i*6.283/n,th0:a0+i*6.283/n,t0:R.t,x:H.x,y:H.y,ph:'rise',tgt:null,cd:0,dead:0,seed:ri(1,9999),trail:[],spin:rand()*6});
+  for(let i=0;i<14;i++)PART.push({x:H.x+rr(-8,8),y:H.y-6,vx:rr(-60,60),vy:rr(-120,-40),life:0,max:rr(.5,.9),r:rr(1.4,2.6),col:pick(['#e0a0ff','#c060e0','#ffffff']),type:'glow',drag:1.6});
   for(const o of R.out)if(encReach(o)&&dist(o.x,o.y,H.x,H.y)<CELL*1.6)encCry(o,'spirits')}
-function encSpiritsUpdate(H,dt){const sp=H.sp;if(!sp)return;
+/* the land's own bounds (the reach, when the board is zoomed to it): the ring they lap */
+function encSpRing(){if(!R.encRing){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const c of R.cells){if(c.locked||c.fringe)continue;x0=Math.min(x0,c.x);x1=Math.max(x1,c.x+CELL);y0=Math.min(y0,c.y);y1=Math.max(y1,c.y+CELL)}
+    if(x0>x1){x0=BX;x1=BX+BW;y0=BY;y1=BY+BW}R.encRing={cx:(x0+x1)/2,cy:(y0+y1)/2,rx:(x1-x0)/2-CELL*.45,ry:(y1-y0)/2-CELL*.5}}return R.encRing}
+const ENC_SP_LAP=2.6; // seconds for their one lap
+function encSpiritsUpdate(H,dt){const sp=H.sp;if(!sp)return;const O=encSpRing(),at=th=>[O.cx+Math.cos(th)*O.rx,O.cy+Math.sin(th)*O.ry];
   for(const s of sp){if(s.dead)continue;const age=R.t-s.t0;s.spin+=dt*14;
     s.trail.push([s.x,s.y]);if(s.trail.length>7)s.trail.shift();
     if(R.phase==='recede'){s.dead=R.t;s.fade=1;continue}
-    if(age<1.4){const k=age/1.4,a=s.a0+age*6,r=5+k*22;s.x=H.x+Math.cos(a)*r;s.y=H.y-6-k*26+Math.sin(a)*r*.45;continue}
-    if(age<2.1){s.y+=Math.sin(R.t*9+s.seed)*.25;if(!s.growl){s.growl=1;try{SFX.ghost()}catch(e){}}continue}
-    // hunt: their own hero if they can, else the nearest one still out there
-    if(!s.tgt||!encReach(s.tgt)||!bzHero(s.tgt)){const taken=new Set(sp.filter(o=>o!==s&&!o.dead&&o.tgt).map(o=>o.tgt));const prey=R.out.filter(o=>encReach(o)&&bzHero(o));
-      let best=null,bd=1e9;for(const o of prey){const d=dist(o.x,o.y,s.x,s.y)+(taken.has(o)?120:0);if(d<bd){bd=d;best=o}}s.tgt=best}
+    if(s.ph==='rise'){if(age<.8){const k=age/.8,a=s.a0+age*8,r=4+k*16;s.x=H.x+Math.cos(a)*r;s.y=H.y-6-k*20+Math.sin(a)*r*.45;continue}s.ph='scatter';try{SFX.whoosh(1)}catch(e){}}
+    if(s.ph==='scatter'){const[px,py]=at(s.th0),dx=px-s.x,dy=py-s.y,d=Math.hypot(dx,dy)||1,v=Math.min(d,520*dt);s.x+=dx/d*v;s.y+=dy/d*v;
+      if(d<6||age>2.2){s.ph='lap';s.th=s.th0;s.lap=0;if(!s.growl){s.growl=1;try{SFX.ghost()}catch(e){}}}continue}
+    if(s.ph==='lap'){const w=6.283/ENC_SP_LAP*dt;s.th+=w;s.lap+=w;const[px,py]=at(s.th);s.x=lerp(s.x,px,Math.min(1,dt*12));s.y=lerp(s.y,py+Math.sin(age*5+s.seed)*4,Math.min(1,dt*12));
+      if(s.lap>=6.283){s.ph='hunt';try{SFX.whoosh(.9)}catch(e){}}continue}
+    // the hunt: their own hero if they can, else the nearest one still out there
+    if(!s.tgt||!encReach(s.tgt)||!bzHero(s.tgt)){const taken=new Map();for(const o of sp)if(o!==s&&!o.dead&&o.tgt)taken.set(o.tgt,(taken.get(o.tgt)||0)+1);const prey=R.out.filter(o=>encReach(o)&&bzHero(o));
+      let best=null,bd=1e9;for(const o of prey){const d=dist(o.x,o.y,s.x,s.y)+(taken.get(o)||0)*140;if(d<bd){bd=d;best=o}}s.tgt=best}
     const T=s.tgt;if(!T){s.y+=Math.sin(R.t*5+s.seed)*.3;continue}
-    s.cd-=dt;const tx=T.x,ty=T.y-18,dx=tx-s.x,dy=ty-s.y,d=Math.hypot(dx,dy)||1,sp2=(s.cd>0?40:88)*dt,px=-dy/d,py=dx/d,w=Math.sin(R.t*7+s.seed)*1.6;
+    s.cd-=dt;const tx=T.x,ty=T.y-18,dx=tx-s.x,dy=ty-s.y,d=Math.hypot(dx,dy)||1,sp2=(s.cd>0?40:110)*dt,px=-dy/d,py=dx/d,w=Math.sin(R.t*7+s.seed)*1.6;
     s.x+=dx/d*Math.min(sp2,d)+px*w;s.y+=dy/d*Math.min(sp2,d)+py*w;
     if(d<12&&s.cd<=0&&!(T.spHitT>R.t)){s.cd=1.1;T.spHitT=R.t+.8;try{SFX.zap();SFX.ghost()}catch(e){}sparks(T.x,T.y-16,8,'#d070ff');if(encHurt(T,.1,H))encXp(T,H);s.x-=dx/d*20;s.y-=dy/d*14}}}
 /* the restless cairn: stacked stones with a faint wisp; once woken it lies scattered */
@@ -8540,7 +8730,7 @@ function mpAct(seat,cmd){const god=MP.seats[seat];if(!god||!cmd||!MP.on)return;i
     case 'grave':{const f=cmd.fid!=null?G.fallen.find(f=>f.fid===cmd.fid):G.fallen[cmd.i];if(f&&!f.pending&&f.faith===god)raise(f);return}
     case 'train':{const h=G.heroes.find(x=>x.id===cmd.id);if(h&&h.faith===god&&hasBuild(6))trainPick(h,cmd.cls);return}
     case 'dial':{const L=locByK(cmd.k);if(!L)return;if(cdBlocked(god,L.cx,L.cy-34,remoteSlack(seat)))return;const f0=L.face;dialCommit(L,cmd.v);if(L.face!==f0){cdStart(god,L.cx,L.cy);logEv('dial',{g:god,L:cmd.k,v:cmd.v})}return}
-    case 'enc':{if(!liveLand()||!R.enc||!encHit(cmd.bx,cmd.by))return;if(!mpSpend(S,cmd.bx,cmd.by))return;MP.encRun=true;try{encClick(0,0,cmd.bx,cmd.by)}finally{MP.encRun=false}logEv('click',{g:god,on:'enc'});return}
+    case 'enc':{if(!liveLand()||!R.enc)return;if(cmd.sp){const H=R.enc.hz[cmd.sp[0]],s=H&&H.sp&&H.sp[cmd.sp[1]];if(s&&!s.dead){cmd.bx=s.x;cmd.by=s.y}}if(!encHit(cmd.bx,cmd.by))return;if(!mpSpend(S,cmd.bx,cmd.by))return;MP.encRun=true;try{encClick(0,0,cmd.bx,cmd.by)}finally{MP.encRun=false}logEv('click',{g:god,on:'enc'});return}
     case 'ready':prepReady(god);return;
     case 'buy':buyDie(god,cmd.t);return;
     case 'build':{if(!buildReady()||CAMPF.state!=='open'||CAMPFX)return;let tile=null;if(cmd.tile&&campLv()<8){tile=campFree().find(([a,b])=>a===cmd.tile[0]&&b===cmd.tile[1])||null;if(!tile)return}campBuild(tile);logEv('build',{g:god,lv:campLv()});return}
@@ -9143,7 +9333,7 @@ function applyExtras(x){if(!x)return;const now=performance.now();
 function fastSnap(){const H=[],L=[],D=[];
   for(const id in HR){const hr=HR[id];if(!G.heroes.includes(hr.h)&&hr.state!=='dead')continue;const s=hr.say;
     H.push([hr.h.id,Math.round(hr.x),Math.round(hr.y),HST.indexOf(hr.state),hr.face,Math.round(hr.walk*9),hr.h.hp,Math.round(hr.atkA*9),hr.hurt>0?1:0,
-      (hr.pray?1:0)|(hr.atTown?2:0)|(hr.risen?4:0)|(hr.daze>0?8:0)|(hr.state==='depart'&&hr.delay>0?16:0)|(hr.encHide?32:0),hr.loc?hr.loc.k:-1,Math.round((hr.cheerT||0)*10),s&&s.t<s.dur?s.text:0,s&&s.urgent?1:0,hr.xpT>0?1:0])}
+      (hr.pray?1:0)|(hr.atTown?2:0)|(hr.risen?4:0)|(hr.daze>0?8:0)|(hr.state==='depart'&&hr.delay>0?16:0)|(hr.encHide?32:0),hr.loc?hr.loc.k:-1,Math.round((hr.cheerT||0)*10),s&&s.t<s.dur?s.text:0,s&&s.urgent?1:0,hr.xpT>0?1:0,hr.leap?[Math.round(Math.min(1,hr.leap.t)*100),hr.leap.s0===1?1:0]:0])}
   if(R&&R.locs)for(const L0 of R.locs){const E=L0.enemy;L.push([L0.k,LST.indexOf(L0.state),E?E.hp:0,E?E.max:0,E?E.lvl:0,E?EK.indexOf(E.kind):0,E&&E.flash>0?1:0,
     (L0.looted?1:0)|(L0.broken?2:0)|(L0.spent?4:0)|(L0.touched?8:0)|(L0.used.size?16:0)|(L0.razed?32:0),L0.face,Math.round((L0.mo||0)*100),L0.floor||0,L0.fighters.length,L0.queue.length,
     L0.openT!=null&&L0.openT>-50?Math.round((R.t-L0.openT)*10):-1,Math.round((L0.goneT||0)*10)])}
@@ -9212,13 +9402,15 @@ function applyFast(F){if(!MP.mirror||!NETS.mounted||F.q<=NETS.applied)return;NET
   if(ph==='camp'&&R&&R.land){R=null;growArena();for(const id in HR)if(HR[id].state==='dead')delete HR[id]}
   else if(ph==='camp'&&R&&!R.land)R=null;
   if(ph==='throw'&&!R)R={claimed:new Set(),dice:[],cur:null,thrown:[],t:0,events:[],land:false,cells:null,locs:[],out:[],phase:'throw',stats:{w:0,f:0,dead:0,kills:0,lv:0},ended:false,mirror:true};
-  if(R&&R.land){if(ph!==R.phase){if(ph==='celebrate')MUSIC.go(null,{out:2});if(ph==='recede'){ZM.tz=1;R.recT0=F.T;R.recFar=Math.max(...R.cells.map(c=>c.dist));MUSIC.go('camp',{in:2.5,out:.6});R.t=F.T}R.phase=ph}
+  if(R&&R.land){if(ph!==R.phase){if(ph==='celebrate')MUSIC.go(null,{out:2});if(ph==='recede'){ZM.tz=1;R.recT0=F.T;R.recFar=Math.max(...R.cells.filter(c=>!c.locked).map(c=>c.dist));MUSIC.go('camp',{in:2.5,out:.6});R.t=F.T}R.phase=ph}
     if(Math.abs(R.t-F.T)>.35)R.t=F.T;R.cd=F.C!=null?R.t-F.C:null}
   // people
   for(const a of F.H){const h=objById(G.heroes,a[0]);if(!h)continue;const hr=ensureHR(h);const st=HST[a[3]]||'camp';
     if(hr.mx==null||Math.hypot(a[1]-hr.x,a[2]-hr.y)>140||st==='camp'&&hr.state!=='camp'&&hr.state!=='arrive'&&hr.state!=='home'&&hr.state!=='run'){hr.x=a[1];hr.y=a[2]}hr.mx=a[1];hr.my=a[2];
     if(st==='dead'&&hr.state!=='dead')hr.say=null;hr.state=st;hr.face=a[4];hr.walk=a[5]/9;h.hp=a[6];hr.atkA=Math.max(hr.atkA,a[7]/9);if(a[8])hr.hurt=Math.max(hr.hurt,.12);
     hr.pray=!!(a[9]&1);hr.atTown=!!(a[9]&2);hr.risen=!!(a[9]&4);if(a[9]&8)hr.daze=Math.max(hr.daze||0,.3);hr.delay=a[9]&16?1:0;hr.encHide=a[9]&32?1:0;hr.loc=a[10]>=0?locByK(a[10]):null;hr.cheerT=a[11]/10;if(a[14])hr.xpT=Math.max(hr.xpT||0,.6);
+    // mid-leap between the camp and the land (65-zoom-reach): drawn on the table, growing to the land's zoom or shrinking back
+    if(a[15]){const z=zrBase(true).z,L=hr.leap||(hr.leap={});L.t=a[15][0]/100;L.s0=a[15][1]?1:z;L.s1=a[15][1]?z:1}else hr.leap=null;
     if(a[12]){if(!hr.say||hr.say.text!==a[12])hr.say={text:a[12],t:0,dur:2.2,urgent:!!a[13]}}}
   if(R&&R.land)R.out=Object.values(HR).filter(hr=>G.heroes.includes(hr.h)&&hr.state!=='camp'&&hr.state!=='arrive'||hr.state==='dead');
   // places
@@ -9238,7 +9430,9 @@ function applyFast(F){if(!MP.mirror||!NETS.mounted||F.q<=NETS.applied)return;NET
 MP.mirrorTick=function(dt,t){const gdt=dt*(SPD.v||1);
   for(const id in HR){const hr=HR[id];hr.t+=dt;hr.atkA=Math.max(0,hr.atkA-dt*4);hr.hurt=Math.max(0,hr.hurt-dt);if(hr.daze>0)hr.daze-=dt;if(hr.xpT>0)hr.xpT-=dt;if(hr.say){hr.say.t+=dt;if(hr.say.t>hr.say.dur)hr.say=null}
     if(hr.mx!=null){const k=Math.min(1,dt*12);hr.x=lerp(hr.x,hr.mx,k);hr.y=lerp(hr.y,hr.my,k)}}
-  for(const d of DICE){if(d.state==='mirror'||d.state==='tray'||d.state==='rheld'){if(d.mx!=null){const k=Math.min(1,dt*(d.mstate==='fly'?20:12));d.x=lerp(d.x,d.mx,k);d.y=lerp(d.y,d.my,k);d.z=lerp(d.z,d.mz,k);if(d.mq)d.q=Q.slerp(d.q,d.mq,k)}}
+  // each die grows with the land's zoom on the mat (65-zoom-reach), going by the state the host has it in
+  for(const d of DICE){{const st=d.state;if(st==='mirror'&&d.mstate)d.state=d.mstate;zrDieK(d,dt);d.state=st}
+    if(d.state==='mirror'||d.state==='tray'||d.state==='rheld'){if(d.mx!=null){const k=Math.min(1,dt*(d.mstate==='fly'?20:12));d.x=lerp(d.x,d.mx,k);d.y=lerp(d.y,d.my,k);d.z=lerp(d.z,d.mz,k);if(d.mq)d.q=Q.slerp(d.q,d.mq,k)}}
     else if(d.state==='held'){if(HAND.held.includes(d))updateHeld(d,dt,t);else d.state='mirror'}
     else if(d.state==='hop'){const h=d.hop;if(!h){d.state='mirror'}else{h.t+=dt/h.dur;const tt=clamp(h.t,0,1),e=easeInOut(tt);d.x=lerp(h.sx,h.tx,e);d.y=lerp(h.sy,h.ty,e);d.z=lerp(h.sz,h.tz,e)+4*h.h*tt*(1-tt);d.q=Q.slerp(h.sq,h.tq,easeOut(tt));if(h.t>=1){d.hop=null;h.then&&h.then()}}}
     else if(d.state==='drop')updateDrop(d,dt);else if(d.state==='ped'){d.q=Q.norm(Q.mul(Q.axis(.35,1,.25,dt*.85),d.q));d.z=lerp(d.z,12+Math.sin(t*2.2)*3,dt*6);d.x=lerp(d.x,PED.x,dt*10);d.y=lerp(d.y,PED.y,dt*10)}
@@ -9302,8 +9496,12 @@ function encHit(bx,by){if(!R||!R.enc)return false;for(const H of R.enc.hz){if(!e
   if(H.kind===2&&dist(bx,by,H.x,H.y)<19)return true;
   if(H.kind===4&&H.sp&&H.sp.some(s=>!s.dead&&R.t-s.t0>=.4&&dist(bx,by,s.x,s.y)<17))return true;
   if(H.kind===6&&H.M&&(H.M.state==='roam'||H.M.state==='fight')&&dist(bx,by,H.M.x,H.M.y-12)<22)return true}return false}
+/* which spirit is under the hand: they fly fast (scatter, lap), so a click names the spirit and the host strikes it where it is now */
+function encSpAt(bx,by){if(!R||!R.enc)return null;for(let i=0;i<R.enc.hz.length;i++){const H=R.enc.hz[i];if(H.kind!==4||!H.sp||!encOn(H))continue;
+  const j=H.sp.findIndex(s=>!s.dead&&R.t-s.t0>=.4&&dist(bx,by,s.x,s.y)<17);if(j>=0)return[i,j]}return null}
 // a click on a hazard is a command; the host runs it for the god who clicked
-{const f=encClick;encClick=function(x,y,bx,by){if(!MP.on||MP.encRun)return f(x,y,bx,by);if(!liveLand()||!R.enc||!encHit(bx,by))return false;CMD({c:'enc',bx:Math.round(bx),by:Math.round(by)});return true}}
+{const f=encClick;encClick=function(x,y,bx,by){if(!MP.on||MP.encRun)return f(x,y,bx,by);if(!liveLand()||!R.enc||!encHit(bx,by))return false;
+  const sp=encSpAt(bx,by);CMD(Object.assign({c:'enc',bx:Math.round(bx),by:Math.round(by)},sp?{sp}:{}));return true}}
 /* ---------- the bot looks after its own ---------- */
 function encBotChoices(seat,god,add){if(!R||!R.enc)return;const go=(bx,by)=>mpAct(seat,{c:'enc',bx:Math.round(bx),by:Math.round(by)});
   R.enc.hz.forEach((H,i)=>{if(!encOn(H))return;
@@ -9852,17 +10050,17 @@ function drawBackWall(g,t){const now=performance.now()/1000,hold=HAND.held.lengt
 /* the board's gate: once every adventurer is through, an iron portcullis slams down behind them; it lifts for anyone heading home */
 const GATE={p:0,v:0,shut:false,t0:0,ready:0};
 function gateWanted(){if(!R||R.phase!=='adventure'||!R.out.length)return false;
-  for(const hr of R.out){const s=hr.state;if(s==='depart'||s==='home'||s==='run'||s==='cheer')return false;if(s==='leave'&&dist(hr.x,hr.y,BX,GATE_Y)<95)return false}return true}
+  for(const hr of R.out){const s=hr.state;if(s==='depart'||s==='home'||s==='run'||s==='cheer')return false;if(s==='leave'&&dist(hr.x,hr.y,...zrEdgeB())<95)return false}return true}
 function stepGate(dt){const want=gateWanted();
   if(want&&!GATE.shut){GATE.ready+=dt;if(GATE.ready>.45){GATE.shut=true;GATE.v=0;SFX.chain()}}else if(!want){GATE.ready=0;if(GATE.shut){GATE.shut=false;SFX.chain()}}
   if(GATE.shut&&GATE.p<1){GATE.v+=dt*14;GATE.p=Math.min(1,GATE.p+GATE.v*dt);
     if(GATE.p>=1){// the slam
       SFX.clang();SFX.thud(1.2);shakeScreen(.9);const x=BX-7;
-      for(const s of[-1,1])dust(x,GATE_Y+s*18,1.3);puff(x,GATE_Y+20,14,'#a89a80');sparks(x,GATE_Y+18,16,'#ffd27a');ring(x,GATE_Y,'rgba(255,220,150,.9)',true);
-      for(let i=0;i<10;i++)PART.push({x:x+rr(-10,10),y:GATE_Y+rr(-20,20),vx:rr(-140,140),vy:rr(-160,-40),life:0,max:rr(.4,.8),r:rr(1,2.2),col:pick(['#fff2c0','#ffd27a','#ffffff']),type:'glow',drag:2});
+      const GY=zrYE();for(const s of[-1,1])dust(x,GY+s*18,1.3);puff(x,GY+20,14,'#a89a80');sparks(x,GY+18,16,'#ffd27a');ring(x,GY,'rgba(255,220,150,.9)',true);
+      for(let i=0;i<10;i++)PART.push({x:x+rr(-10,10),y:GY+rr(-20,20),vx:rr(-140,140),vy:rr(-160,-40),life:0,max:rr(.4,.8),r:rr(1,2.2),col:pick(['#fff2c0','#ffd27a','#ffffff']),type:'glow',drag:2});
       GATE.slamT=performance.now()/1000}}
   if(!GATE.shut&&GATE.p>0)GATE.p=Math.max(0,GATE.p-dt*1.6)}
-function drawGate(g,t){if(GATE.p<=0)return;const x=BX-17,w=22,top=GATE_Y-25,h=50,drop=(1-GATE.p)*62,sl=GATE.slamT?Math.max(0,1-(t-GATE.slamT)/.5):0;
+function drawGate(g,t){if(GATE.p<=0)return;const x=BX-17,w=22,top=zrYE()-25,h=50,drop=(1-GATE.p)*62,sl=GATE.slamT?Math.max(0,1-(t-GATE.slamT)/.5):0;
   g.save();g.beginPath();g.rect(x-6,top-70,w+12,h+76);g.clip();g.translate(0,-drop+Math.sin(sl*20)*sl*2);
   // shadow, bars, cross bars, spikes, rivets
   g.fillStyle='rgba(0,0,0,.4)';g.fillRect(x+3,top+4,w,h);
@@ -9874,7 +10072,7 @@ function drawGate(g,t){if(GATE.p<=0)return;const x=BX-17,w=22,top=GATE_Y-25,h=50
   g.restore()}
 /* ---------- drawing the live table ---------- */
 /* the square the dice can land in: a soft golden frame at the heart of the board, brightest while dice are in hand or in the air */
-function drawArena(g,t){const an=ARENA.anim;let k=1,n=ARENA.n;if(an){k=Math.min(1,(t-an.t0)/.9);n=lerp(an.from,ARENA.n,easeOutBack(k));if(k>=1)ARENA.anim=null}
+function drawArena(g,t){zrBase();const zh=HAND.held.length>0||(R&&R.phase==='throw');if(ARENA.n>=N||!zh)return;{const a=.85+Math.sin(t*2.4)*.1;g.save();g.globalCompositeOperation='lighter';g.shadowColor='rgba(255,210,120,1)';g.shadowBlur=18;g.strokeStyle='rgba(255,214,130,'+a+')';g.lineWidth=3;g.strokeRect(BX+2,BY+2,BW-4,BW-4);g.restore()}return;const an=ARENA.anim;let k=1,n=ARENA.n;if(an){k=Math.min(1,(t-an.t0)/.9);n=lerp(an.from,ARENA.n,easeOutBack(k));if(k>=1)ARENA.anim=null}
   if(n>=N&&!an)return;const live=R&&R.land&&R.phase!=='throw';if(live&&!an)return;
   const c0=(N-n)/2,ax=BX+c0*CELL,ay=BY+c0*CELL,aw=n*CELL,hold=HAND.held.length>0||(R&&R.phase==='throw');
   const a=(hold?.85:.32)+Math.sin(t*2.4)*.1+(an?(1-k)*.6:0);g.save();g.globalCompositeOperation='lighter';g.shadowColor='rgba(255,210,120,1)';g.shadowBlur=hold?18:8;
@@ -9908,7 +10106,7 @@ function drawRoads(g){
   for(let pass=0;pass<2;pass++){for(const c of R.cells){if(!c.links.size&&!c.west)continue;const pr=clamp((t-c.roadT)/.14,0,1);if(pr<=0)continue;const tp=R.phase==='recede'?1-clamp((R.t-R.recT0)/.3,0,1):tileProg(c);if(tp<=0)continue;
     g.globalAlpha=Math.min(1,tp*1.5);g.strokeStyle=tcol(pass?(c.ter==='water'||c.ter==='ocean'?'#8a6238':'#b9a47c'):'#5e5038');g.lineWidth=pass?12:17;g.beginPath();
     for(const j of c.links){const o=R.cells[j];g.moveTo(c.cx,c.cy);g.lineTo(c.cx+(o.c-c.c)*CELL/2*pr,c.cy+(o.r-c.r)*CELL/2*pr)}
-    if(c.west){g.moveTo(c.cx,c.cy);g.lineTo(c.cx-(CELL/2+20)*pr,c.cy)}g.stroke();
+    if(c.west){g.moveTo(c.cx,c.cy);g.lineTo(c.cx-(CELL/2+zrWestX())*pr,c.cy)}g.stroke();
     if(pass){if(!c.peb){const r2=mulberry(c.i*97+5);c.peb=[];for(let k=0;k<9;k++)c.peb.push([r2()*14-7,r2()*14-7,r2()<.5?'#dccca8':'#8c7a5a'])}
       if(c.ter==='water'||c.ter==='ocean'){g.strokeStyle=tcol('#5a3a1a');g.lineWidth=1;for(const j of c.links){const o=R.cells[j],dx=o.c-c.c,dy=o.r-c.r;for(let s=4;s<CELL/2*pr;s+=5){const px=c.cx+dx*s,py=c.cy+dy*s;g.beginPath();g.moveTo(px-dy*6,py-dx*6);g.lineTo(px+dy*6,py+dx*6);g.stroke()}}}
       else for(const[px,py,col]of c.peb){g.fillStyle=tcol(col);g.fillRect(c.cx+px,c.cy+py,1.6,1.6)}}}}
@@ -10002,7 +10200,7 @@ function render(t){
   const sx=SHAKE>0?(rand()-.5)*SHAKE*10:0,sy=SHAKE>0?(rand()-.5)*SHAKE*10:0;
   g.fillStyle='#0b0705';g.fillRect(0,0,W,H);g.translate(sx,sy);diceLayer.style.transform=SHAKE>0?'translate('+sx.toFixed(1)+'px,'+sy.toFixed(1)+'px)':'';
   g.drawImage(BG,0,0,W,H);
-  drawMatLive(g,t);
+  drawMatLive(g,t);zrMat(g,t);
   drawCampLayer(g);skyCampGround(g);
   drawCircleGlow(g,t);
   drawCampLive(g,t);
@@ -10014,22 +10212,22 @@ function render(t){
   drawPedGlow(g,t);mpDraw('tray',g,t);
   const items=[];
   if(land){
-    for(const c of R.cells)if(c.decor){const p=tileProg(c);if(p>0)items.push({b:1,y:c.y+CELL-4,f:()=>{const s=R.phase==='recede'?p:easeOutBack(p);g.save();g.translate(c.cx,c.y+CELL);g.scale(s,s);skyDecor(g,c,t);g.restore()}})}
+    for(const c of R.cells)if(c.decor){const p=tileProg(c);if(p>0)items.push({b:c.fringe?2:1,y:c.y+CELL-4,f:()=>{const s=R.phase==='recede'?p:easeOutBack(p);g.save();g.translate(c.cx,c.y+CELL);g.scale(s,s);skyDecor(g,c,t);g.restore()}})}
     for(const L of R.locs){if(R.t>=L.appearT)items.push({b:1,y:L.cy-12,f:()=>drawLoc(g,L,t)});
       const pp=()=>R.phase==='recede'?tileProg(L.cell):1;
     }encItems(items,g,t)}
   for(const m of MESS)items.push(m.k==='grave'?{b:1,y:Math.max(m.y,m.ly||0),f:()=>MP.on?asGod(m.f&&m.f.faith,()=>m.f&&m.f.faith===meGod()&&raiseOK()?glowGrave(g,m.x,m.y,1,true,t,1):drawGrave(g,m.x,m.y,1,true)):raiseOK()?glowGrave(g,m.x,m.y,1,true,t,1):drawGrave(g,m.x,m.y,1,true)}:{b:1,y:m.y-1,f:()=>drawCorpse(g,m.x,m.y,m.lvl,m.kind,1)});
-  for(const id in HR){const hr=HR[id];if(hr.state==='dead'||!G.heroes.includes(hr.h)||hr.encHide)continue;items.push({b:bzHero(hr),y:hr.y,f:()=>drawHeroFull(g,hr,t)})}
+  for(const id in HR){const hr=HR[id];if(hr.state==='dead'||!G.heroes.includes(hr.h)||hr.encHide)continue;items.push({b:bzHero(hr),y:hr.y,f:()=>zrHeroDraw(g,hr,t)})}
   items.push({y:FIRE.y+6,f:()=>onCampTile(g,FIRE.x,FIRE.y,()=>drawFlame(g,FIRE.x,FIRE.y+4,t))});
-  items.push({y:GATE_Y+26,f:()=>drawGate(g,t)});
+  items.push({y:zrYE()+26,f:()=>drawGate(g,t)});
   items.push({y:9999,f:()=>drawBuildSpot(g,t)});
   // board items (b) draw in the zoomed, clipped board layer; camp, gate and build spot stay on the fixed table
-  items.sort((a,b)=>a.y-b.y);bzDraw(g,()=>{for(const it of items)if(it.b)it.f()});for(const it of items)if(!it.b)it.f();
+  items.sort((a,b)=>a.y-b.y);bzDraw(g,()=>{for(const it of items)if(it.b===2)it.f()});bzDrawL(g,()=>{for(const it of items)if(it.b===1)it.f()});for(const it of items)if(!it.b)it.f();
   // v11: the sky over the board and the camp: weather, then the light (71-sky)
   drawSky(g,t);
   // cleanup: graves bob a beckoning marker until the god lays them to rest
-  if(MESS.length&&(!R||R.phase==='recede'))bzDraw(g,()=>{for(const m of MESS){if(m.k!=='grave')continue;const b=Math.abs(Math.sin(t*4+m.x))*5;g.save();g.globalCompositeOperation='lighter';g.fillStyle='rgba(220,210,255,.7)';g.beginPath();g.moveTo(m.x-4,m.y-28-b);g.lineTo(m.x+4,m.y-28-b);g.lineTo(m.x,m.y-22-b);g.closePath();g.fill();g.restore()}})
-  bzPass(g,B=>{for(const id in HR){const hr=HR[id];if(hr.say&&hr.state!=='dead'&&G.heroes.includes(hr.h)&&bzHero(hr)===B){const onB=!(hr.state==='camp'||hr.state==='arrive');drawSay(g,hr.x+(hr.say.urgent?Math.sin(t*40)*1.2:0),hr.y-(onB?44:60),hr.say.text,hr.say.t,hr.say.dur,hr.say.urgent?'#ff5a4a':MP.on?pgod(hr.h)&&deityOf(hr.h.faith).c:believes(hr.h)?deityOf(G.deity).c:null)}}});
+  if(MESS.length&&(!R||R.phase==='recede'))bzDrawL(g,()=>{for(const m of MESS){if(m.k!=='grave')continue;const b=Math.abs(Math.sin(t*4+m.x))*5;g.save();g.globalCompositeOperation='lighter';g.fillStyle='rgba(220,210,255,.7)';g.beginPath();g.moveTo(m.x-4,m.y-28-b);g.lineTo(m.x+4,m.y-28-b);g.lineTo(m.x,m.y-22-b);g.closePath();g.fill();g.restore()}})
+  bzPassL(g,B=>{for(const id in HR){const hr=HR[id];if(hr.say&&hr.state!=='dead'&&G.heroes.includes(hr.h)&&bzHero(hr)===B){const onB=!(hr.state==='camp'||hr.state==='arrive');drawSay(g,hr.x+(hr.say.urgent?Math.sin(t*40)*1.2:0),hr.y-(onB?44:60),hr.say.text,hr.say.t,hr.say.dur,hr.say.urgent?'#ff5a4a':MP.on?pgod(hr.h)&&deityOf(hr.h.faith).c:believes(hr.h)?deityOf(G.deity).c:null)}}});
   if(G.lastChance&&!G.lost){const a=.25+Math.sin(t*2.6)*.12;g.save();const gr=g.createRadialGradient(W/2,H/2,H*.38,W/2,H/2,H*.85);gr.addColorStop(0,'rgba(120,0,0,0)');gr.addColorStop(1,'rgba(150,10,10,'+a+')');g.fillStyle=gr;g.fillRect(-20,-20,W+40,H+40);g.restore()}
   if(G.doom){const a=.35+Math.sin(t*3)*.2,D=deityOf(G.deity);g.save();g.globalCompositeOperation='lighter';const gr=g.createRadialGradient(GRAVE.x+GRAVE.w/2,GRAVE.y+GRAVE.h/2,10,GRAVE.x+GRAVE.w/2,GRAVE.y+GRAVE.h/2,GRAVE.w*.7);
     gr.addColorStop(0,'rgba('+D.rgb+','+a*.5+')');gr.addColorStop(1,'rgba('+D.rgb+',0)');g.fillStyle=gr;g.fillRect(GRAVE.x-40,GRAVE.y-40,GRAVE.w+80,GRAVE.h+80);g.restore()}
@@ -10080,7 +10278,7 @@ function tick(now){
   HAND.shake*=Math.exp(-2.2*dt);if(HAND.down&&now-HAND.lt>70){HAND.vx*=.82;HAND.vy*=.82}
   if(HAND.held.length&&HAND.shake>.08&&rand()<HAND.shake*1.1)SFX.rattle(pick(HAND.held).mat,.3+HAND.shake);
   // shaking charges the dice: they glow and a chime swells, then it slowly ebbs away
-  if(HAND.held.length){HAND.charge=clamp(HAND.charge+Math.max(0,HAND.shake-.06)*dt*1.5-dt*.12,0,1);const tier=Math.floor(HAND.charge*4.999);if(tier>HAND.tier){SFX.twinkle(tier);const c=pick(HAND.held);burst(c.x,c.y-c.z*.3,8+tier*3,G.deity?DEITIES[G.deity].c:'#ffe27a')}HAND.tier=tier;
+  if(HAND.held.length){HAND.charge=clamp(HAND.charge+Math.max(0,HAND.shake-.06)*dt*1.5-dt*.12,0,1);const tier=Math.floor(HAND.charge*4.999);if(tier>HAND.tier){SFX.twinkle(tier);const c=pick(HAND.held);zrTable(()=>burst(c.x,c.y-c.z*.3,8+tier*3,G.deity?DEITIES[G.deity].c:'#ffe27a'))}HAND.tier=tier;
     if(HAND.charge>.05&&rand()<HAND.charge*dt*40){const c=pick(HAND.held);PART.push({x:c.x+rr(-20,20),y:c.y+rr(-20,20)-c.z*.4,vx:rr(-30,30),vy:rr(-60,-20),life:0,max:rr(.4,.8),r:rr(1,2.4),col:G.deity?DEITIES[G.deity].c:'#ffe27a',type:'glow',drag:1})}}
   else{HAND.charge=Math.max(0,HAND.charge-dt*.6);HAND.tier=Math.floor(HAND.charge*4.999)}
   SFX.aura(HAND.held.length?HAND.charge:HAND.charge*.5);if(HAND.charge>.08&&rand()<HAND.charge*dt*7)SFX.twinkle(-1);
