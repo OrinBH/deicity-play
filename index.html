@@ -8079,18 +8079,25 @@ const encDefs=()=>G&&G.dice?G.dice.filter(d=>d.type==='encounter'):[];
 /* Oct 7 (Aaron): more Encounter Dice as the god grows: one more for every 10 Deity Levels (golden dice called), up to ENC_MAX. A match keeps one */
 const ENC_PER_DLV=10,ENC_MAX=3;
 const encCount=()=>MP.on?1:clamp(1+Math.floor(((G&&G.goldenGiven)||0)/ENC_PER_DLV),1,ENC_MAX);
+/* Oct 12 (Aaron): "they should progress on their own ... at the same rate" and "we really do need to bundle them": each Encounter Die climbs
+   ENC_LADDER from its own first face, one step on the land's shared beat (every ENC_STEP rounds from round 10), so the dice that rise all rise
+   in the same round and play one moment. def.encS0 is the beat it came on (the first die 0, so it has the round's faces, as before). A die saved
+   without it reads 0, so a run's dice from before this keep their faces and climb on from there (no migration needed). */
+const encBeat=r=>r<ENC_LADDER[0][0]?-1:Math.floor((r-ENC_LADDER[0][0])/ENC_STEP);
+function encFacesOf(def,r){const af=admFaces(r);if(af!==undefined)return af;const b=encBeat(r);return b<0?null:ENC_LADDER[clamp(b-(def.encS0||0),0,ENC_LADDER.length-1)][1].slice()}
+const encClimbing=()=>encDefs().some(d=>(d.faces||[]).join('')!==ENC_LADDER[ENC_LADDER.length-1][1].join(''));
 function encSync(quiet){if(!G||!G.deity||G.lost||R||(typeof TITLE_ON!=='undefined'&&TITLE_ON)||G.intro===1||INTRO.on)return;if(CER.on||(G.les&&!G.cerDone))return;
   const r=(G.round||0)+1,f=encFacesFor(r),defs=encDefs(),want=f?encCount():0;
   // too many (no die yet for this round, or fewer called for): the extra ones leave
   if(defs.length>want){for(const def of defs.slice(want)){const d=DICE.find(x=>x.def===def);G.dice.splice(G.dice.indexOf(def),1);if(d)removeDie(d)}save();if(!f)return}
   if(!f)return;
-  const key=f.join(''),ch=[];let nd0=null;
+  const ch=[];let nd0=null;
   // Oct 9 (Aaron): the die comes up and the changed face shatters (dfxQueue, below); a new one comes up and slams into the tray
-  const moment=()=>{const top=ch.length?Math.max(...ch.map(o=>o.to)):Math.max(...f);dfxQueue(ch.length?{kind:'shatter',type:'encounter',list:ch,lv:top,title:'The Land Rises Against You',sub:ENC_NAME[top]||'Encounter Die'}:{type:'encounter',def:nd0,lv:top,title:'The Land Rises Against You',sub:'Encounter Die'})};
+  const moment=()=>{const top=ch.length?Math.max(...ch.map(o=>o.to)):Math.max(...(nd0?nd0.faces:f));dfxQueue(ch.length?{kind:'shatter',type:'encounter',list:ch,lv:top,title:'The Land Rises Against You',sub:ENC_NAME[top]||'Encounter Die'}:{type:'encounter',def:nd0,lv:top,title:'The Land Rises Against You',sub:'Encounter Die'})};
   let changed=false;
-  for(const def of encDefs())if(def.encKey!==key){const was=(def.faces||[]).slice();def.faces=f;def.encKey=key;const d=DICE.find(x=>x.def===def);if(d)paintDie(d);changed=true;
-    if(was.length===6){let bi=-1;for(let i=0;i<6;i++)if(f[i]!==was[i]&&(bi<0||f[i]>f[bi]))bi=i;if(bi>=0)ch.push({def,from:was[bi],to:f[bi],c:FACE_ORDER.indexOf(bi)})}}
-  let added=0;while(encDefs().length<want){const nd=grantDie('encounter',[BCX+added*40,BY+60],{src:'land'});if(!nd)break;nd0=nd0||nd;nd.faces=f.slice();nd.encKey=key;const d=DICE.find(x=>x.def===nd);if(d)paintDie(d);added++}
+  for(const def of encDefs()){const fd=encFacesOf(def,r),key=fd.join('');if(def.encKey!==key){const was=(def.faces||[]).slice();def.faces=fd;def.encKey=key;const d=DICE.find(x=>x.def===def);if(d)paintDie(d);changed=true;
+    if(was.length===6){let bi=-1;for(let i=0;i<6;i++)if(fd[i]!==was[i]&&(bi<0||fd[i]>fd[bi]))bi=i;if(bi>=0)ch.push({def,from:was[bi],to:fd[bi],c:FACE_ORDER.indexOf(bi)})}}}
+  let added=0;while(encDefs().length<want){const nd=grantDie('encounter',[BCX+added*40,BY+60],{src:'land'});if(!nd)break;nd0=nd0||nd;nd.encS0=encDefs().length>1?Math.max(0,encBeat(r)):0;nd.faces=encFacesOf(nd,r);nd.encKey=nd.faces.join('');const d=DICE.find(x=>x.def===nd);if(d)paintDie(d);added++}
   if(added&&!quiet){moment();toast(ico('dieI')+'<span><b>Encounter Die'+(encDefs().length>1?' '+encDefs().length:'')+'</b>The land fights back</span>',4200)}
   else if(changed&&!quiet)moment();
   if(added||changed)save()}
@@ -8723,7 +8730,7 @@ const QP_TRK={
   dungeon:{n:'The land raises your dungeon dice',c:'dungeon',f:n=>qpDunSch(n)},
   encounter:{n:'Encounter Die',c:'encounter',f:n=>{if(typeof ENC_LADDER==='undefined')return null;const u=n+1,st=ENC_LADDER.map(e=>e[0]);let prev=1,next=null;
     for(const s of st){if(s<=u)prev=s;else if(next==null)next=s}const hit=n>0&&u===prev&&st.includes(u);
-    if(next==null){if(!hit)return null;const p2=st[st.length-1]-(st[st.length-2]||1);return{k:0,P:p2,hit,last:1}}return{k:u-prev,P:next-prev,hit,first:u<st[0]}}}};
+    if(next==null){/* Oct 12: a later die still climbs on the beat */if(typeof encClimbing==='function'&&encClimbing()){const k=(u-st[0])%ENC_STEP;return{k,P:ENC_STEP,hit:n>0&&k===0}}if(!hit)return null;const p2=st[st.length-1]-(st[st.length-2]||1);return{k:0,P:p2,hit,last:1}}return{k:u-prev,P:next-prev,hit,first:u<st[0]}}}};
 /* the land's dungeon ladder: Lab 31's per-die table (dunTarget/DUN_MAXR: the faces each die should show at round r), or Lab 21's
    every DUN_EVERY rounds; the die that changes soonest sets the track. Worked out once per round. */
 function qpDunSch(n){if(typeof dunTarget==='function'&&typeof DUN_MAXR!=='undefined'){if(QP.dun&&QP.dun.n===n&&QP.dun.g===G)return QP.dun.s;
@@ -8743,7 +8750,7 @@ function qpEncTip(){const s=qpSch('encounter'),E=qpEncLv();if(E.max)return'<b>En
    Die's highest face on every side, like the shard rows (paintRowDie, 44); grey until the land first throws it, a gold check once the ladder is done */
 function qpEncLv(){const defs=typeof encDefs==='function'?encDefs():typeof encDef==='function'&&encDef()?[encDef()]:[];let lv=0;for(const d of defs)for(const v of d.faces||[])lv=Math.max(lv,v);
   const L=typeof ENC_LADDER!=='undefined'?ENC_LADDER:null,top=L?Math.max(...L[L.length-1][1]):6;if(!defs.length&&L)lv=Math.max(...L[0][1]);
-  return{lv:Math.max(1,lv),own:defs.length>0,max:defs.length>0&&lv>=top}}
+  return{lv:Math.max(1,lv),own:defs.length>0,max:defs.length>0&&lv>=top&&!(typeof encClimbing==='function'&&encClimbing())}}
 function qpEncPaint(){const o=QP.enc;if(!o)return;const E=qpEncLv();o.r.classList.toggle('none',!E.own);o.r.classList.toggle('max',E.max);if(E.lv===o.lv)return;
   const up=o.lv!=null&&E.own&&E.lv>o.lv;o.lv=E.lv;o.die.querySelectorAll('.fc').forEach(e=>e.style.backgroundImage='url('+faceTex(DT.encounter.mat,E.lv)+')');
   if(up){o.kick=(o.kick||0)+Math.PI*2;o.still=false}}
@@ -12946,7 +12953,7 @@ function a2Build(kind){
 /* ---------- the acts ---------- */
 function a2Start(K){const n=Math.max(1,K.floors||K.face||1);
   // Lab 86 (Aaron): "the dungeons are only this deep the floor numbers divided by two, rounding up": ceil(n/2) floors of monsters, then the boss
-  // alone on the floor after (Lab 72 had n floors). The levels are as before: floor f's monsters are deepFloor(f-1) = f+1, the boss deepBoss(n) = n+2.
+  // alone on the floor after (Lab 72 had n floors). The levels are as before: floor f's monsters are deepFloor(f-1) = f, the boss deepBoss(n) = n (Lab 59).
   R.a2={floors:Math.ceil(n/2)+1,floor:0,boss:deepBoss(n),keep:K,had:{},ph:'open',traps:[],t0:R.t};R.phase='a2';R.cd=R.t;
   const party=a2Party();for(const hr of party){if(hr.state==='camp'||hr.state==='home'||hr.state==='run'||hr.state==='arrive'){const[gx,gy]=zrGateC();hr.x=gx+rr(-8,8);hr.y=gy+rr(-6,6);hr.leap=null;hr.state='a2wait'}else cheer(hr)}
   RESULT={t0:performance.now()/1000,win:true,title:'The Deep Opens',sub:pick(['Something stirs below.','The keep yawns open.','Down they go.']),cleared:R.locs.filter(L=>DT[L.type].combat&&L.state==='cleared').length,total:R.locs.filter(L=>DT[L.type].combat).length,dead:R.stats.dead||0};
