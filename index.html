@@ -7975,8 +7975,8 @@ function lessonTick(dt,gdt){if(!G||!G.les||TITLE_ON||MP.on)return;
   if(L.face<2){G.les.dial=1;lessonsDone();return}
   LES.t+=gdt;if(LES.t>1.1&&dialable(L))lessonStart(L)}
 function lessonStart(L){LES.on=true;LES.L=L;LES.f0=L.face;TUT.pause=true;TUT.free=false;
-  // v9: the drag costs worship like it always will, so the god gets a little to start with
-  {const need=10-G.worship;if(need>0){gainWorship(need,L.cx,L.cy-30);floatText(L.cx,L.cy-52,'A gift of influence','#fff2b0','emb:'+G.deity,16,2.2)}}const el=$('lesson5');el.className='';
+  // v9: the drag costs worship like it always will, so the god gets a little to start with (v35: enough for one step down at the dial's prices, 20 from a 2, 30 from a 3)
+  {const dv=dialValues(L),di=dv.indexOf(L.face),need=(di>0?dialPrice(L.face,dv[di-1]):10)-G.worship;if(need>0){gainWorship(need,L.cx,L.cy-30);floatText(L.cx,L.cy-52,'A gift of influence','#fff2b0','emb:'+G.deity,16,2.2)}}const el=$('lesson5');el.className='';
   el.innerHTML='<div class="lbox">'+ico('skull')+'<span><b>Too strong!</b>This enemy looks too hard for your team. Drag it down to weaken it. It costs a little influence: here is some to start.</span><button class="lx" aria-label="Skip">'+ico('x')+'</button></div><div class="larr"></div>';
   el.hidden=false;el.querySelector('.lx').onclick=e=>{e.stopPropagation();lessonEnd(false)};placeLesson(L);
   try{SFX.error();SFX.twinkle(3)}catch(_){}shakeScreen(.3);ring(L.cx,L.cy,'#ff6a5a',true)}
