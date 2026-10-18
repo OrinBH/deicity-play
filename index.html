@@ -18424,8 +18424,8 @@ function comboPay(n,v){v=Math.max(1,v|0);return n===3?20+10*v:n===4?25+25*v:n===
    end of the top entry's hf. */
 const PN_NOTES=[
   {v:35,d:'Oct 17',hf:[['35.1','The tutorial now gives enough Influence to drag your first die down.'],['35.2','Patch notes: click the version in the corner of the title.']],rows:[
-    ['introdie','A new opening',['A short tale of the Void and the Spark plays before the title.','Click to hurry it along.']],
-    ['lesson','A guided first run',['Start drops you straight into a tutorial run.','The Spark shows you around and points at what to click.','Then choose your path: Roguelike or Casual.','The ? in the corner opens a quick help map.']],
+    ['introdie','A new opening',['A short tale of the Void and Spark plays before the title.','Click to hurry it along.']],
+    ['lesson','A guided first run',['Start drops you straight into a tutorial run.','Spark shows you around and points at what to click.','Then choose your path: Roguelike or Casual.','The ? in the corner opens a quick help map.']],
     ['brute','Elites',['Every mini-boss is now an Elite, each with its own trick.','Its lair stays sealed until the rest of The Land is cleared.','Then your party gathers at a banner and marches on it together.']],
     ['camp','A growing camp',['Fame opens ten buildings. Ore raises them.','Build on wild spots around the camp.','Gear comes in tiers, capped by your town and chests.','God powers at the Menhir, faith ranks in the Chapel.']],
     ['dice2','New dice, the Rolliquary',['New dice sets with glowing finishes.','Earn one Divinite a round and unlock dice in the Rolliquary (Menu).','Bone & Ember, Jade Temple and Brass Clockwork are retired.']],
@@ -18434,7 +18434,65 @@ const PN_NOTES=[
     ['skull','Tougher spirits',['Angry Spirits no longer bounce off after a hit.','Several spirits on one hero each strike on their own.','The Elite Wraith is harder to stop.']],
     ['anvil','New names',['The pedestal is now the Forge, the playmat the Landslab.','Mat tiles are no longer sold; Gold Inlay and Sigil Stones are free in the workshop.']],
     ['star','Smaller things',['Every XP gain shows a +N star.','Dice tooltips show what each die makes.','Matching-dice callouts show over everything.','A grave in every square of the graveyard.']]]},
-  {v:34,d:'Oct 12',rows:[['rise','Encounter Dice climb',['Your second and third Encounter Dice climb on their own, on the same beat as the first.']]]},
+  {v:33,d:'Oct 12',hf:[['v34','Your second and third Encounter Dice climb on their own, on the same beat as the first.']],rows:[
+    ['floors','The deep dungeon',['A Deep Dungeon Die opens floors below The Land once it is cleared, down to a boss.','Lairs, walkers, rubble, totems, a boss room and a final chest.','Alone or in Co-op.']],
+    ['stoMat','Build your own playmat',['Playmats are made of tiles now.','Lay them out yourself in the mat workshop (Menu > Playmat).']],
+    ['tree','A living Land',['Critters roam by terrain and weather.','Trees grow thicker, and a click chops the one it lands on.']],
+    ['fish','Water',['Some rounds bring a lake, some an island.','Strong lairs taint the water near them.']],
+    ['party','Heroes keep their space',['Heroes never stand on top of each other.','One hero per chest.']],
+    ['dieI','A die’s big moment',['A new die, or a face The Land raises, comes up to show itself.']],
+    ['shardI','Shards and ore',['Stone shards are ore, for camp upgrades.','Countdown pips under the round counter show what comes next.','Beaten Elites drop deep shards.']],
+    ['elChat','Event log and chat',['Everything that happens, bottom left, with chat in multiplayer.']],
+    ['link','Online with no account',['Play over the internet from any browser, no sign-in needed.']],
+    ['star','Smaller things',['No more sealed faces.','Roguelike gives you two rounds before you fade into myth.','Red bubbles for danger, and you can see who is talking.','Jammed traps can be smashed.','Two quick presses on the speed button pause.','The Treasury shows off a few items on the title.']]]},
+  {v:31,d:'Oct 9',rows:[
+    ['coop','Co-op',['Up to four gods share one pantheon (Title > Multiplayer > Co-op).','Everyone throws at once. Play with bots or host a lobby with a code.']],
+    ['land','Roads',['Roads pave themselves: dirt, then stone, then marble to the gate.']],
+    ['smash','The deep die slams',['The Deep Dungeon Die slams down and leaves a crater.']],
+    ['music','Round-end music',['A short win or loss tune when a round ends.']],
+    ['hourglass','Countdowns',['Tracks show when the next mini-boss, deep die, dungeon rise and Encounter Die are due.']],
+    ['dice2','Encounter Die stays put',['It no longer jumps into your hand; a throw without it asks for it. Roll All still takes it.']],
+    ['star','Smaller things',['Pause locks the playmat.','Every monster has a death sound.','Heroes hold up new gear.','Stone shards bring deep dungeon dice.']]]},
+  {v:25,d:'Oct 6',hf:[['v26','Particles stay put when the board zooms.'],['v27','Casual runs never fade into myth.'],['v28','Temples pull faith at every level.'],['v29','A lair can always be dragged down, even when all its faces match.'],['v30','The Encounter Die no longer snaps into your hand.']],rows:[
+    ['mp','Multiplayer: the Duel',['Two gods, one table (Title > Multiplayer > Duel).','Play the bot, or host and join with a four-letter code.','The Encounter Die is in from round 1.']]]},
+  {v:23,d:'Oct 6',hf:[['v24','The playmat zooms to how far your reach goes.']],rows:[
+    ['worship','Influence',['Your currency is now Influence. Followers still worship you.']],
+    ['dice2','The Encounter Die',['From round 10 The Land throws a hazard die with yours: vines, traps, the pit, angry spirits, a roaming monster and more.','One face gets worse every few rounds.']],
+    ['gdie','Your first dice',['On a first run, the starting dice arrive one at a time, each with a short scene.']],
+    ['camp','Camp on the grid',['The camp and graveyard sit on the board’s grid, with a creek and a bridge.']],
+    ['restart','Final throw',['Roll All turns red and pulses when no one follows you.']]]},
+  {v:17,d:'Oct 4',hf:[['v18','Mages recover half their health after each win.'],['v19','The sky rolls with your throw; the faith bar only shows once someone leans your way.'],['v20','Overheal fades in about 10 seconds and is never carried home.'],['v21','New god portraits.'],['v22','Classes back to warrior 24, rogue 18, mage 16 health.']],rows:[
+    ['sword','Class rebalance',['Warriors soak hits, rogues and mages hit harder but break easier.']],
+    ['convert','Names in their god’s colour',['Anyone not yet yours shows a bar in your colour.']],
+    ['dial','Sealed faces',['The dial shows sealed faces with a padlock.']]]},
+  {v:14,d:'Oct 4',hf:[['v15','Hovering a hero shows only their small trait icon.'],['v16','Smaller portrait images, so the game loads faster.']],rows:[
+    ['shield','A safe start',['Every run’s first lair lands on a 1.','New runs keep the dungeon die’s 3s sealed until its shard bar fills.']],
+    ['sky','Weather on The Land only',['Weather falls on The Land while it is out; the bare board stays dry.']],
+    ['heart','Cleaner personalities',['No thought bubbles; a hero’s trait is a small sign, with details on hover.']]]},
+  {v:12,d:'Oct 4',hf:[['v13','The gods’ portraits are hand-drawn sheet art; Morwen and Kazra get new titles and signs.']],rows:[
+    ['sky','Weather and light',['Dawn, day, dusk and night, with rain, storms, snow, fog and wind.','Fire, torches and windows light up the night.','Mood only. Switch it off in Settings.']]]},
+  {v:10,d:'Oct 4',hf:[['v11','New god portraits.']],rows:[
+    ['heart','Personalities',['Every hero has one: Pious, Aggressive, Socialite, Greedy, Cautious, Wanderer or Loyal.','Each leans toward its kind of place.']]]},
+  {v:9,d:'Oct 4',rows:[
+    ['lesson','Easier first steps',['Tips before the first throw, and dice that wiggle to be thrown.','The drag-down lesson gives you Influence to spend.']],
+    ['gear','The Menu',['The gear is now the Menu, with the Chronicle and the title screen.','New feats show a badge.']],
+    ['star','Smaller things',['Graves glow only when you can afford a raise.','Ghosts pop on a click.','Overheal up to +25%.','Face prices and hero XP tripled.']]]},
+  {v:7,d:'Oct 4',hf:[['v8','Roll All throws every die, boss dice included.']],rows:[
+    ['boss','Boss dice with teeth',['Mini-bosses and the deep dungeon are nearly deadly now: a deliberate choice.','Armor blocks at most half a hit.']],
+    ['speed','Speeds',['Pause, 1x, 2x and 3x.']]]},
+  {v:5,d:'Oct 4',hf:[['v6','New altar prices; the title unfolds on a click; one speed button.']],rows:[
+    ['myth','Deicity',['The game is called Deicity now.','A fourth god: Kazra.']],
+    ['altar','The Altar',['Spend Influence on dice to keep, or one-use mini-boss and deep dice.']],
+    ['brute','Mini-boss and deep dice',['One-use dice: a mini-boss every 10 rounds, a deep dungeon every 25.']],
+    ['gdie','Deity Level',['A badge counts your golden dice.']],
+    ['hammer','Razing and chopping',['Knock down a beaten lair for shards. Trees take a few chops.']],
+    ['camp','Camp life',['Heroes wander the camp between rounds.','Click a kept hero to train them toward another class.']]]},
+  {v:4,d:'Oct 3',rows:[
+    ['tStats','The Annals',['Your stats: this run, your best, past runs and lifetime.']],
+    ['trophy','Feats',['59 feats with five tiers each, from Bronze to Divine.']],
+    ['stoCoffer','The Treasury',['Playmats, dice sets, mounts, land tiles, campsites and hero skins. Cosmetic only.']],
+    ['helm','Hero looks and gear',['Heroes look richer as they level; gear comes in rarities.']],
+    ['pray','Your first follower',['Name your first believer at the start of every run.']]]},
 ];
 const PN={on:false,el:null,ver:null,open:{}};
 const PN_CUR=(()=>{const N=PN_NOTES[0],h=N.hf&&N.hf.length?N.hf[N.hf.length-1][0]:null;return h||String(N.v)})();
