@@ -18412,6 +18412,83 @@ function dieTipNew(def){const t=def.type;let f=null;try{f=dieFaces(def)}catch(e)
    Four 25 + 25 x face; Five and Six+ stay the old payout x face (a face of 0 counts as 1) */
 function comboPay(n,v){v=Math.max(1,v|0);return n===3?20+10*v:n===4?25+25*v:n===5?75*v:KIND_PAY(n)*v}  // Lab 34.96 (Aaron: "five will need a bump since its so close to 50 now, move that base to 75"): Five 75 x face (was 60 x)
 
+/* ================= Lab stage 49: patch notes (Aaron, Oct 17: "subtle text in the bottom right ... it says the version then the patch notes when
+   clicked"; "something they can scroll through- like a long scroll"; "i do like the summaries, but ... the ability to get into the weeds";
+   "we also need sound in it too when you open and close the patch notes scroll and click open and closed an item") =================
+   The title's bottom-right corner reads "v36 · Patch notes" in the copyright line's faint type, gold while there are notes this player hasn't opened
+   (PMETA.seen.notes = the newest version they opened). Clicking it unrolls a long parchment scroll over the title: every version, newest first, one line
+   per change (icon + a few words); clicking a line unfolds its details, again folds them. Closes with the x, a click outside, or Esc.
+   Sounds (the game's own): unroll = a whoosh, a paper rustle and quick paper ticks; roll up = rustle + a softer whoosh; a line opens/folds = open/close.
+   Aaron (Oct 17): a new version number only for a big new feature; small updates are hot fixes (35.1, 35.2 ...), each one line under its version's
+   last row, "Hot fixes". The corner shows the newest hot fix's number. To add a version: a new entry at the top of PN_NOTES; a hot fix: a line at the
+   end of the top entry's hf. */
+const PN_NOTES=[
+  {v:35,d:'Oct 17',hf:[['35.1','The tutorial now gives enough Influence to drag your first die down.'],['35.2','Patch notes: click the version in the corner of the title.']],rows:[
+    ['introdie','A new opening',['A short tale of the Void and the Spark plays before the title.','Click to hurry it along.']],
+    ['lesson','A guided first run',['Start drops you straight into a tutorial run.','The Spark shows you around and points at what to click.','Then choose your path: Roguelike or Casual.','The ? in the corner opens a quick help map.']],
+    ['brute','Elites',['Every mini-boss is now an Elite, each with its own trick.','Its lair stays sealed until the rest of The Land is cleared.','Then your party gathers at a banner and marches on it together.']],
+    ['camp','A growing camp',['Fame opens ten buildings. Ore raises them.','Build on wild spots around the camp.','Gear comes in tiers, capped by your town and chests.','God powers at the Menhir, faith ranks in the Chapel.']],
+    ['dice2','New dice, the Rolliquary',['New dice sets with glowing finishes.','Earn one Divinite a round and unlock dice in the Rolliquary (Menu).','Bone & Ember, Jade Temple and Brass Clockwork are retired.']],
+    ['hand','The slap',['Press on a monster, tree or rock, hold, and swipe back and forth.','Every swipe is one more click on what you grabbed.']],
+    ['dial','Rebalance',['Deity Levels: 200 Influence, then 15% more each level.','XP to level up: 25, then 30 × level − 10.','Traps: 5 XP to each hero who comes through.','Three of a Kind: 20 + 10 × its face. Four: 25 + 25 × face. Five: 75 × face. Six or more: 120 × face.','Deep dungeon monsters: 2× health, 2× XP. Deep boss: 10× XP.','Dragging a place up costs 20 × its new level; down, half that for each level.']],
+    ['skull','Tougher spirits',['Angry Spirits no longer bounce off after a hit.','Several spirits on one hero each strike on their own.','The Elite Wraith is harder to stop.']],
+    ['anvil','New names',['The pedestal is now the Forge, the playmat the Landslab.','Mat tiles are no longer sold; Gold Inlay and Sigil Stones are free in the workshop.']],
+    ['star','Smaller things',['Every XP gain shows a +N star.','Dice tooltips show what each die makes.','Matching-dice callouts show over everything.','A grave in every square of the graveyard.']]]},
+  {v:34,d:'Oct 12',rows:[['rise','Encounter Dice climb',['Your second and third Encounter Dice climb on their own, on the same beat as the first.']]]},
+];
+const PN={on:false,el:null,ver:null,open:{}};
+const PN_CUR=(()=>{const N=PN_NOTES[0],h=N.hf&&N.hf.length?N.hf[N.hf.length-1][0]:null;return h||String(N.v)})();
+const pnNew=()=>!((PMETA&&PMETA.seen&&PMETA.seen.notes)>=+PN_CUR);
+{const st=document.createElement('style');st.textContent=
+ '#pnVer{position:absolute;right:26px;bottom:8px;z-index:76;padding:6px 0;border:0;background:none;cursor:pointer;font:600 12px/1 var(--body);letter-spacing:.06em;color:rgba(190,182,170,.55)}'+
+ '#pnVer.new{color:rgba(236,189,82,.9);text-shadow:0 0 8px rgba(255,200,90,.45)}#pnVer:hover{color:#fff2b0;text-decoration:underline;text-underline-offset:3px}'+
+ '#pnVeil{position:absolute;inset:0;z-index:77;background:rgba(6,3,2,.6);animation:fadein .3s ease-out}'+
+ '#pnScroll{position:absolute;left:390px;top:46px;width:500px;z-index:78;filter:drop-shadow(0 18px 30px rgba(0,0,0,.7))}'+
+ '#pnScroll .rod{position:relative;height:22px;margin:0 -16px;border-radius:11px;background:linear-gradient(#a8743c,#6a4018 55%,#3a220c);box-shadow:inset 0 2px 0 rgba(255,220,160,.35);z-index:2}'+
+ '#pnScroll .rod:before,#pnScroll .rod:after{content:"";position:absolute;top:-3px;width:20px;height:28px;border-radius:6px;background:radial-gradient(circle at 40% 35%,#ffe9a8,var(--brass1) 45%,var(--brass2))}'+
+ '#pnScroll .rod:before{left:-14px}#pnScroll .rod:after{right:-14px}'+
+ '#pnScroll .x{position:absolute;right:18px;top:-2px;width:26px;height:26px;border-radius:50%;border:0;padding:0;cursor:pointer;display:grid;place-items:center;background:#2b1a06;color:#e8c98a;z-index:3;box-shadow:0 0 0 1.5px var(--brass2)}'+
+ '#pnScroll .x svg{width:12px;height:12px}#pnScroll .x:hover{color:#fff2b0}'+
+ '#pnScroll .sheet{height:0;overflow-y:auto;padding:0 26px 0 30px;transition:height .45s cubic-bezier(.3,.9,.4,1),padding .45s;background:linear-gradient(90deg,rgba(120,80,30,.28),transparent 7%,transparent 93%,rgba(120,80,30,.28)),linear-gradient(#f4e6c4,#e6cf9c);color:#3a2410;scrollbar-width:thin;scrollbar-color:#8a5a2a transparent}'+
+ '#pnScroll.on .sheet{height:640px;padding:16px 26px 26px 30px}'+
+ '#pnScroll .sheet::-webkit-scrollbar{width:8px}#pnScroll .sheet::-webkit-scrollbar-thumb{background:#8a5a2a;border-radius:4px}'+
+ '#pnScroll .ver{text-align:center;margin:10px 0 6px}#pnScroll .ver h2{margin:0;font:400 36px/1 var(--display);color:#5a2a0c}'+
+ '#pnScroll .ver em{display:block;margin-top:4px;font:800 12px var(--body);font-style:normal;letter-spacing:.12em;text-transform:uppercase;color:#8a6a3a}'+
+ '#pnScroll .orn{height:1px;margin:18px 30px 6px;background:linear-gradient(90deg,transparent,rgba(90,50,10,.45),transparent)}'+
+ '#pnScroll .row{display:grid;grid-template-columns:28px 1fr 16px;gap:12px;align-items:center;padding:8px;border-radius:7px;cursor:pointer;user-select:none}'+
+ '#pnScroll .row:hover{background:rgba(120,70,20,.07)}#pnScroll .row+.row,#pnScroll .det+.row{box-shadow:0 -1px 0 rgba(90,50,10,.14)}'+
+ '#pnScroll .row svg{width:26px;height:26px;color:#6a3a12}#pnScroll .row span{font:700 18px/1.15 var(--body);color:#3a2410}'+
+ '#pnScroll .row i{width:9px;height:9px;border-right:2.5px solid #8a5a2a;border-bottom:2.5px solid #8a5a2a;transform:rotate(45deg) translate(-2px,-2px);transition:transform .2s}'+
+ '#pnScroll .row.open{background:rgba(120,70,20,.1)}#pnScroll .row.open i{transform:rotate(-135deg) translate(-2px,-2px)}'+
+ '#pnScroll .det{margin:0 8px 8px 48px;padding:4px 0 2px 12px;border-left:2px solid rgba(138,90,42,.45)}'+
+ '#pnScroll .det div{font:600 15px/1.3 var(--body);color:#4a3418;margin:4px 0}#pnScroll .det b{font-weight:800;color:#6a3a12;margin-right:4px}';
+ document.head.appendChild(st)}
+function pnUnrollSnd(up){try{SFX.init();if(up){SFX.rustle();SFX.whoosh(.35);return}SFX.whoosh(.5);SFX.rustle();for(let i=0;i<5;i++)setTimeout(()=>{try{SFX.fold(i)}catch(e){}},60+i*55)}catch(e){}}
+function pnRows(){return PN_NOTES.map((N,vi)=>(vi?'<div class="orn"></div>':'')+'<div class="ver"><h2>Version '+N.v+'</h2><em>'+N.d+'</em></div>'+
+  N.rows.map(([i,t,d],k)=>{const key=N.v+':'+k,o=!!PN.open[key];return'<div class="row'+(o?' open':'')+'" data-k="'+key+'">'+ico(i)+'<span>'+esc(t)+'</span><i></i></div>'+(o?'<div class="det">'+d.map(x=>'<div>'+esc(x)+'</div>').join('')+'</div>':'')}).join('')+pnHf(N)).join('')}
+function pnHf(N){if(!N.hf||!N.hf.length)return'';const key=N.v+':hf',o=!!PN.open[key];return'<div class="row'+(o?' open':'')+'" data-k="'+key+'">'+ico('hammer')+'<span>Hot fixes</span><i></i></div>'+
+  (o?'<div class="det">'+N.hf.map(([v,x])=>'<div><b>'+v+'</b> '+esc(x)+'</div>').join('')+'</div>':'')}
+function pnOpen(){if(PN.on)return;PN.on=true;PN.open={};const st=$('stage');
+  const v=document.createElement('div');v.id='pnVeil';st.appendChild(v);
+  const el=PN.el=document.createElement('div');el.id='pnScroll';
+  el.innerHTML='<div class="rod"><button class="x" aria-label="Close">'+ico('x')+'</button></div><div class="sheet">'+pnRows()+'</div><div class="rod"></div>';st.appendChild(el);
+  void el.offsetWidth;el.classList.add('on');pnUnrollSnd(false);
+  for(const e of[v,el])for(const k of['pointerdown','click'])e.addEventListener(k,ev=>ev.stopPropagation());
+  for(const e of[v,el])e.addEventListener('wheel',ev=>ev.stopPropagation(),{passive:true});  // the board's zoom reads the wheel on the stage (like the event log and mat workshop)
+  v.addEventListener('click',()=>pnClose());el.querySelector('.x').addEventListener('click',()=>pnClose());
+  el.querySelector('.sheet').addEventListener('click',ev=>{const r=ev.target.closest&&ev.target.closest('.row');if(!r)return;const k=r.dataset.k,sh=el.querySelector('.sheet'),y=sh.scrollTop;
+    PN.open[k]=!PN.open[k];sh.innerHTML=pnRows();sh.scrollTop=y;try{SFX.init();PN.open[k]?SFX.open():SFX.close();SFX.rustle()}catch(e){}});
+  try{PMETA.seen=PMETA.seen||{};if(!(PMETA.seen.notes>=+PN_CUR)){PMETA.seen.notes=+PN_CUR;pmetaSave()}}catch(e){}pnVerUpd()}
+function pnClose(){if(!PN.on)return;PN.on=false;const el=PN.el,v=$('pnVeil');PN.el=null;pnUnrollSnd(true);
+  if(el){el.classList.remove('on');setTimeout(()=>el.remove(),450)}if(v)v.remove()}
+function pnVerUpd(){let b=PN.ver;const show=TITLE_ON&&!(typeof LORE!=='undefined'&&LORE.on);
+  if(!b){b=PN.ver=document.createElement('button');b.id='pnVer';b.textContent='v'+PN_CUR+' · Patch notes';b.setAttribute('aria-label','Patch notes');
+    for(const k of['pointerdown','click'])b.addEventListener(k,ev=>ev.stopPropagation());b.addEventListener('click',()=>{try{SFX.click()}catch(e){}pnOpen()});$('stage').appendChild(b)}
+  b.hidden=!show;b.classList.toggle('new',pnNew());if(!show&&PN.on)pnClose()}
+setInterval(()=>{try{pnVerUpd()}catch(e){}},300);
+addEventListener('keydown',e=>{if(PN.on&&e.key==='Escape'){e.stopPropagation();e.preventDefault();pnClose()}},true);
+window.__pn={PN,open:pnOpen,close:pnClose,NOTES:PN_NOTES};
+
 /* ================= boot, render loop, input ================= */
 const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage'),diceLayer=$('dice');
 let HOVD=null,K=1,PTR={x:-99,y:-99},CIRCLE_NO=0,cardSig='',crackT=0;
